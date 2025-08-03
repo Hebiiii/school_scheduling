@@ -51,6 +51,36 @@ def find_available_slots(df, grade, cls,
 
 
 # --- Core assignment functions ---
+def assign_fixed_course(df, grade, cls,
+                        subject, teacher, room,
+                        day_periods):
+    """Assign `subject` to specific `day_periods` for a class.
+
+    Parameters
+    ----------
+    df : DataFrame
+        Scheduling table.
+    grade, cls : int
+        Target grade and class.
+    subject, teacher, room : str
+        Information to fill for each slot.
+    day_periods : list of (day, period)
+        Exact slots to occupy.
+    """
+    for day, period in day_periods:
+        idx = df[(df.grade == grade) & (df['class'] == cls)
+                 & (df.day == day) & (df.period == period)]
+        if idx.empty:
+            raise RuntimeError(
+                f"Slot ({day}, {period}) for {grade}-{cls} not in schedule"
+            )
+        if (idx.subject != '').any():
+            raise RuntimeError(
+                f"Slot ({day}, {period}) for {grade}-{cls} already filled"
+            )
+        df.loc[idx.index, ['subject','teacher','room']] = subject, teacher, room
+    return df
+
 def assign_course(df, grade, cls,
                   subject, teacher, room,
                   num_slots=1,
