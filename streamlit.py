@@ -121,7 +121,46 @@ def build_base_df(grade_info):
     )
 
 
+def validate_settings(grade_info, subject_settings):
+    """Validate if the requested periods fit into the timetable.
+
+    For each grade we ensure that the total number of requested periods does not
+    exceed the available slots (5 days * 5 periods + days with a 6th period).
+    We also validate that per-subject settings such as joint lessons, fixed
+    slots and consecutive lessons do not exceed the total number of periods
+    requested for that subject.
+    """
+
+    for grade, info in grade_info.items():
+        available = 5 * 5 + len(info["six_days"])
+        required = sum(s["num"] for s in subject_settings[grade].values())
+        if required > available:
+            raise ValueError(
+                f"{grade}年生のコマ数({required})が利用可能な{available}コマを超えています"
+            )
+
+        for subject, s in subject_settings[grade].items():
+            num = s["num"]
+            joint = s["joint"]
+            fixed = len(s["day_periods"])
+            consecutive = s["consecutive"]
+
+            if joint > num:
+                raise ValueError(
+                    f"{grade}年生 {subject}: 合同授業の回数({joint})がコマ数({num})を超えています"
+                )
+            if fixed > num:
+                raise ValueError(
+                    f"{grade}年生 {subject}: 指定された曜日・時限の数({fixed})がコマ数({num})を超えています"
+                )
+            if joint + fixed + 2 * consecutive > num:
+                raise ValueError(
+                    f"{grade}年生 {subject}: コマ数に対して合同授業・固定・連続授業の設定が多すぎます"
+                )
+
+
 def generate_timetable(grade_info, subject_settings):
+    validate_settings(grade_info, subject_settings)
     df = build_base_df(grade_info)
 
     # joint lessons first
