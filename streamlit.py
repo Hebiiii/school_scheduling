@@ -71,6 +71,15 @@ room_options = {
 week = ["月", "火", "水", "木", "金"]
 periods = [1, 2, 3, 4, 5, 6]
 
+default_six_days = {
+    1: ["なし"],
+    2: ["水"],
+    3: ["火"],
+    4: ["火", "水", "木", "金"],
+    5: ["火", "水", "木", "金"],
+    6: ["火", "水", "木", "金"],
+}
+
 # ====== UI helper utilities ======
 def input_basic_info(grade: int):
     st.markdown(f"#### {grade}年生")
@@ -84,7 +93,7 @@ def input_basic_info(grade: int):
     six_days = st.multiselect(
         "6限まで授業がある日を選んでください",
         options=["なし"] + week,
-        default=["なし"],
+        default=default_six_days[grade],
         key=f"{grade}_six_days",
     )
     if "なし" in six_days:
