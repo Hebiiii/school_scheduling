@@ -106,6 +106,41 @@ def get_available_day_periods(six_days):
 
 
 # ====== Timetable generation ======
+
+def validate_settings(grade_info, subject_settings):
+    """Check logical consistency of timetable settings.
+
+    Raises
+    ------
+    ValueError
+        If the requested lesson counts are impossible to schedule.
+    """
+    for grade, subjects in subject_settings.items():
+        total = sum(info["num"] for info in subjects.values())
+        max_slots = len(week) * 5 + len(grade_info[grade]["six_days"])
+        if total > max_slots:
+            raise ValueError(
+                f"{grade}年生のコマ数の合計{total}が利用可能な{max_slots}コマを超えています"
+            )
+
+        for subject, info in subjects.items():
+            num = info["num"]
+            fixed = len(info["day_periods"])
+            joint = info["joint"]
+            consecutive = info["consecutive"]
+            required = joint + fixed + 2 * consecutive
+            if required > num:
+                raise ValueError(
+                    f"{grade}年生{subject}の設定が不正です: 指定コマ数{num}に対し、"
+                    f"固定{fixed}コマ+連続{2 * consecutive}コマ+合同{joint}コマ= {required}コマ"
+                    "が指定されています"
+                )
+
+            period_limit = info["period_limit"]
+            if period_limit and 6 in period_limit and len(grade_info[grade]["six_days"]) == 0:
+                raise ValueError(f"{grade}年生には6限が存在しません")
+
+
 def build_base_df(grade_info):
     rows = []
     for grade, info in grade_info.items():
@@ -301,6 +336,7 @@ def main():
                     "joint": joint,
                 }
         try:
+            validate_settings(grade_info, subject_settings)
             df = generate_timetable(grade_info, subject_settings)
             st.success("時間割を生成しました")
             st.dataframe(df)
