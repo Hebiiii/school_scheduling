@@ -254,6 +254,16 @@ def main():
 
     st.markdown("---")
     st.subheader("教科ごとの設定")
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stNumberInput"]:has(input[aria-label="コマ数"][value="0"]) {
+            background-color: #EEEEEE;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     for subject in subjects:
         st.markdown("---")
