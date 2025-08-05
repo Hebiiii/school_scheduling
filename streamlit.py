@@ -192,6 +192,7 @@ def generate_timetable(grade_info, subject_settings):
                     continue
                 teacher = info["teacher"]
                 room = info["room"]
+                allow_same_day = num >= 5
                 remaining = num - info["joint"]
 
                 day_periods = info["day_periods"]
@@ -212,6 +213,7 @@ def generate_timetable(grade_info, subject_settings):
                         room,
                         num_slots=consecutive,
                         consecutive=True,
+                        allow_same_day=allow_same_day,
                     )
                     remaining -= 2 * consecutive
 
@@ -226,6 +228,7 @@ def generate_timetable(grade_info, subject_settings):
                         room,
                         num_slots=remaining,
                         period_limit=period_limit,
+                        allow_same_day=allow_same_day,
                     )
 
     return df
