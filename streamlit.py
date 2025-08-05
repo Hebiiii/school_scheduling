@@ -172,7 +172,26 @@ def generate_timetable(grade_info, subject_settings):
     validate_settings(grade_info, subject_settings)
     df = build_base_df(grade_info)
 
-    # joint lessons first
+    # 1. Assign courses with fixed (day, period)
+    for grade, subjects in subject_settings.items():
+        classes = range(1, grade_info[grade]["class_num"] + 1)
+        for cls in classes:
+            for subject, info in subjects.items():
+                if info["num"] <= 0:
+                    continue
+                day_periods = info["day_periods"]
+                if day_periods:
+                    df = assign_fixed_course(
+                        df,
+                        grade,
+                        cls,
+                        subject,
+                        info["teacher"],
+                        info["room"],
+                        day_periods,
+                    )
+
+    # 2. Assign joint classes
     for grade, subjects in subject_settings.items():
         classes = range(1, grade_info[grade]["class_num"] + 1)
         for subject, info in subjects.items():
@@ -182,7 +201,7 @@ def generate_timetable(grade_info, subject_settings):
                     df, subject, group, teacher=info["teacher"], room=info["room"]
                 )
 
-    # per-class assignments
+    # 3. Assign consecutive lessons
     for grade, subjects in subject_settings.items():
         classes = range(1, grade_info[grade]["class_num"] + 1)
         for cls in classes:
@@ -190,18 +209,9 @@ def generate_timetable(grade_info, subject_settings):
                 num = info["num"]
                 if num <= 0:
                     continue
-                teacher = info["teacher"]
-                room = info["room"]
-                allow_same_day = num >= 5
-                remaining = num - info["joint"]
-
-                day_periods = info["day_periods"]
-                if day_periods:
-                    df = assign_fixed_course(
-                        df, grade, cls, subject, teacher, room, day_periods
-                    )
-                    remaining -= len(day_periods)
-
+                remaining = num - info["joint"] - len(info["day_periods"])
+                if remaining <= 0:
+                    continue
                 consecutive = info["consecutive"]
                 if consecutive:
                     df = assign_course(
@@ -209,27 +219,69 @@ def generate_timetable(grade_info, subject_settings):
                         grade,
                         cls,
                         subject,
-                        teacher,
-                        room,
+                        info["teacher"],
+                        info["room"],
                         num_slots=consecutive,
                         consecutive=True,
-                        allow_same_day=allow_same_day,
+                        allow_same_day=num >= 5,
                     )
-                    remaining -= 2 * consecutive
 
+    # 4. Assign lessons with period limits
+    for grade, subjects in subject_settings.items():
+        classes = range(1, grade_info[grade]["class_num"] + 1)
+        for cls in classes:
+            for subject, info in subjects.items():
+                num = info["num"]
+                if num <= 0:
+                    continue
+                remaining = (
+                    num
+                    - info["joint"]
+                    - len(info["day_periods"])
+                    - 2 * info["consecutive"]
+                )
+                if remaining <= 0:
+                    continue
                 period_limit = info["period_limit"]
-                if remaining > 0:
+                if period_limit:
                     df = assign_course(
                         df,
                         grade,
                         cls,
                         subject,
-                        teacher,
-                        room,
+                        info["teacher"],
+                        info["room"],
                         num_slots=remaining,
                         period_limit=period_limit,
-                        allow_same_day=allow_same_day,
+                        allow_same_day=num >= 5,
                     )
+
+    # 5. Assign remaining lessons normally
+    for grade, subjects in subject_settings.items():
+        classes = range(1, grade_info[grade]["class_num"] + 1)
+        for cls in classes:
+            for subject, info in subjects.items():
+                num = info["num"]
+                if num <= 0:
+                    continue
+                remaining = (
+                    num
+                    - info["joint"]
+                    - len(info["day_periods"])
+                    - 2 * info["consecutive"]
+                )
+                if remaining <= 0 or info["period_limit"]:
+                    continue
+                df = assign_course(
+                    df,
+                    grade,
+                    cls,
+                    subject,
+                    info["teacher"],
+                    info["room"],
+                    num_slots=remaining,
+                    allow_same_day=num >= 5,
+                )
 
     return df
 
