@@ -130,6 +130,49 @@ def build_base_df(grade_info):
     )
 
 
+def class_specific_labels(teacher: str, room: str, grade: int, cls: int):
+    """Return teacher and room labels unique to each class.
+
+    Placeholder names like "担任" or "教室" are prefixed with the
+    grade and class number (e.g. 1-1担任). Other names are left
+    unchanged so that shared specialists can be represented properly.
+    """
+    teacher_parts = []
+    for t in teacher.split("/"):
+        t = t.strip()
+        if t in {"担任", "副担任"}:
+            teacher_parts.append(f"{grade}-{cls}{t}")
+        else:
+            teacher_parts.append(t)
+    teacher_label = "/".join(teacher_parts)
+
+    if room == "教室":
+        room_label = f"{grade}-{cls}{room}"
+    else:
+        room_label = room
+
+    return teacher_label, room_label
+
+
+def joint_labels(teacher: str, room: str, grade: int, classes):
+    """Return labels for joint lessons spanning multiple classes."""
+    teacher_parts = []
+    for t in teacher.split("/"):
+        t = t.strip()
+        if t in {"担任", "副担任"}:
+            teacher_parts.extend(f"{grade}-{c}{t}" for c in classes)
+        else:
+            teacher_parts.append(t)
+    teacher_label = "/".join(teacher_parts)
+
+    if room == "教室":
+        room_label = "/".join(f"{grade}-{c}教室" for c in classes)
+    else:
+        room_label = room
+
+    return teacher_label, room_label
+
+
 def validate_settings(grade_info, subject_settings):
     """Validate if the requested periods fit into the timetable.
 
@@ -181,13 +224,16 @@ def generate_timetable(grade_info, subject_settings):
                     continue
                 day_periods = info["day_periods"]
                 if day_periods:
+                    teacher, room = class_specific_labels(
+                        info["teacher"], info["room"], grade, cls
+                    )
                     df = assign_fixed_course(
                         df,
                         grade,
                         cls,
                         subject,
-                        info["teacher"],
-                        info["room"],
+                        teacher,
+                        room,
                         day_periods,
                     )
 
@@ -197,8 +243,11 @@ def generate_timetable(grade_info, subject_settings):
         for subject, info in subjects.items():
             for _ in range(info["joint"]):
                 group = [(grade, c) for c in classes]
+                teacher, room = joint_labels(
+                    info["teacher"], info["room"], grade, classes
+                )
                 df = assign_joint_course(
-                    df, subject, group, teacher=info["teacher"], room=info["room"]
+                    df, subject, group, teacher=teacher, room=room
                 )
 
     # 3. Assign consecutive lessons
@@ -214,13 +263,16 @@ def generate_timetable(grade_info, subject_settings):
                     continue
                 consecutive = info["consecutive"]
                 if consecutive:
+                    teacher, room = class_specific_labels(
+                        info["teacher"], info["room"], grade, cls
+                    )
                     df = assign_course(
                         df,
                         grade,
                         cls,
                         subject,
-                        info["teacher"],
-                        info["room"],
+                        teacher,
+                        room,
                         num_slots=consecutive,
                         consecutive=True,
                         allow_same_day=num >= 5,
@@ -244,13 +296,16 @@ def generate_timetable(grade_info, subject_settings):
                     continue
                 period_limit = info["period_limit"]
                 if period_limit:
+                    teacher, room = class_specific_labels(
+                        info["teacher"], info["room"], grade, cls
+                    )
                     df = assign_course(
                         df,
                         grade,
                         cls,
                         subject,
-                        info["teacher"],
-                        info["room"],
+                        teacher,
+                        room,
                         num_slots=remaining,
                         period_limit=period_limit,
                         allow_same_day=(num >= 5),
@@ -272,13 +327,16 @@ def generate_timetable(grade_info, subject_settings):
                 )
                 if remaining <= 0 or info["period_limit"]:
                     continue
+                teacher, room = class_specific_labels(
+                    info["teacher"], info["room"], grade, cls
+                )
                 df = assign_course(
                     df,
                     grade,
                     cls,
                     subject,
-                    info["teacher"],
-                    info["room"],
+                    teacher,
+                    room,
                     num_slots=remaining,
                     allow_same_day=(num >= 5),
                 )
