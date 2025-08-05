@@ -86,11 +86,14 @@ def assign_course(df, grade, cls,
                   num_slots=1,
                   period_limit=None,
                   consecutive=False,
-                  capacity_limit=1):
+                  capacity_limit=1,
+                  allow_same_day=False):
     """
     Assigns `subject` to `num_slots` slots for a single class ({grade}-{cls}),
     respecting teacher/room capacity, optional period restrictions, and
-    (if `consecutive=True`) requiring two back-to-back periods.
+    (if `consecutive=True`) requiring two back-to-back periods. By default,
+    the same subject is not scheduled twice on the same day unless
+    `allow_same_day` is True.
     """
     assigned = 0
     while assigned < num_slots:
@@ -102,10 +105,12 @@ def assign_course(df, grade, cls,
             unavailable = get_unavailable_day_periods(
                 df, teacher=teacher, room=room, limit=capacity_limit
             )
-        # avoid scheduling the subject twice on the same day
-        used_days = df.query(
-            f'grade=={grade} and `class`=={cls} and subject==@subject'
-        )['day'].tolist()
+        # avoid scheduling the subject twice on the same day unless allowed
+        used_days = []
+        if not allow_same_day:
+            used_days = df.query(
+                f'grade=={grade} and `class`=={cls} and subject==@subject'
+            )['day'].tolist()
 
         candidates = find_available_slots(
             df, grade, cls,
