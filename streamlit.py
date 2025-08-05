@@ -5,19 +5,19 @@ from _functions import assign_course, assign_fixed_course, assign_joint_course
 # ====== Constants ======
 subjects = ["英語", "算数", "国語", "理科", "社会", "図工", "音楽", "体育", "家庭科", "総合", "学活・道徳", "生活", "書写"]
 subject_symbols = {
-    "英語": "🌍",
-    "算数": "📐",
     "国語": "📚",
+    "算数": "📐",
+    "英語": "🌍",
     "理科": "🧪",
     "社会": "🏛️",
+    "総合": "🤔",
+    "書写": "🖌️",
+    "学活・道徳": "🗣️",
     "図工": "🎨",
     "音楽": "🎵",
     "体育": "🤸‍♂️",
     "家庭科": "🍲",
-    "総合": "🤔",
-    "学活・道徳": "🗣️",
     "生活": "🤔",
-    "書写": "🖌️",
 }
 
 # default number of weekly periods for each subject by grade
@@ -91,7 +91,7 @@ def input_basic_info(grade: int):
         key=f"{grade}_class_num",
     )
     six_days = st.multiselect(
-        "6限まで授業がある日を選んでください",
+        "6限授業の日を全て選んでください",
         options=["なし"] + week,
         default=default_six_days[grade],
         key=f"{grade}_six_days",
@@ -313,6 +313,8 @@ def main():
                         step=1,
                         key=f"{grade}_{subject}_joint_class",
                     )
+    
+    st.markdown("---")
     if st.button("時間割を生成"):
         subject_settings = {}
         for grade in grades:
