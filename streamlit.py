@@ -309,7 +309,7 @@ def main():
     st.markdown(
         """
         <style>
-        div[data-testid="stNumberInput"]:has(input[aria-label="コマ数"][value="0"]) {
+        div[data-testid="stColumn"]:has(input[aria-label="コマ数"][value="0"]) {
             background-color: #EEEEEE;
         }
         </style>
