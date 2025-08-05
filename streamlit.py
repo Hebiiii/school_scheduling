@@ -253,7 +253,7 @@ def generate_timetable(grade_info, subject_settings):
                         info["room"],
                         num_slots=remaining,
                         period_limit=period_limit,
-                        allow_same_day=num >= 5,
+                        allow_same_day=(num >= 5),
                     )
 
     # 5. Assign remaining lessons normally
@@ -280,7 +280,7 @@ def generate_timetable(grade_info, subject_settings):
                     info["teacher"],
                     info["room"],
                     num_slots=remaining,
-                    allow_same_day=num >= 5,
+                    allow_same_day=(num >= 5),
                 )
 
     return df
@@ -341,7 +341,7 @@ def main():
                     room_options[subject],
                     key=f"{grade}_{subject}_room",
                 )
-                with st.expander("詳細設定"):
+                with st.popover("詳細設定"):
                     day_period = st.multiselect(
                         "曜日・時限の指定",
                         options=[f"{d}曜 {p}限" for d, p in available_day_periods[grade]] + ["なし"],
