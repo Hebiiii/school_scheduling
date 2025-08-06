@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import re
 from _functions import assign_course, assign_fixed_course, assign_joint_course
 
 # ====== Constants ======
@@ -491,6 +492,23 @@ def main():
             st.dataframe(df)
             csv = df.to_csv(index=False).encode("utf-8-sig")
             st.download_button("CSVをダウンロード", csv, "timetable.csv", "text/csv")
+        except RuntimeError as e:
+            msg = str(e)
+            m = re.search(r"Slot \((.+), (\d+)\) for (\d+)-(\d+) (.+)", msg)
+            if m:
+                day, period, grade, cls, reason = m.groups()
+                if "already filled" in reason:
+                    st.error(
+                        f"{grade}年{cls}組の{day}曜{period}限には既に他の授業が設定されています。"
+                    )
+                elif "not in schedule" in reason:
+                    st.error(
+                        f"{grade}年{cls}組の{day}曜{period}限は時間割に存在しません。"
+                    )
+                else:
+                    st.error(f"エラー: {msg}")
+            else:
+                st.error(f"エラー: {msg}")
         except Exception as e:
             st.error(f"エラー: {e}")
 
