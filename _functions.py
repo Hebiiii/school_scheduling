@@ -26,7 +26,8 @@ def get_unavailable_for_consecutive(df, teacher=None, room=None, limit=1):
     consec = set()
     for day, period in single:
         consec.add((day, period))       # can't start at a busy slot
-        consec.add((day, period - 1))   # can't start if next slot is busy
+        if period > 1:
+            consec.add((day, period - 1))   # can't start if next slot is busy
     return list(consec)
 
 
