@@ -313,12 +313,12 @@ def generate_timetable(grade_info, subject_settings):
                     )
 
     # 5. Assign remaining lessons normally
-    for subject, info in sorted(
-                subjects.items(), key=lambda item: item[1]["num"]
-            ):
-        classes = range(1, grade_info[grade]["class_num"] + 1)
-        for cls in classes:
-            for subject, info in subjects.items():
+    for grade, subjects in subject_settings.items():
+        sorted_subjects = sorted(
+            subjects.items(), key=lambda item: item[1]["num"]
+        )
+        for subject, info in sorted_subjects:
+            for cls in range(1, grade_info[grade]["class_num"] + 1):
                 num = info["num"]
                 if num <= 0:
                     continue
