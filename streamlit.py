@@ -276,7 +276,7 @@ def generate_timetable(grade_info, subject_settings):
                         room,
                         num_slots=consecutive,
                         consecutive=True,
-                        allow_same_day=num >= 5,
+                        allow_same_day=num >= 4,
                     )
 
     # 4. Assign lessons with period limits
@@ -309,11 +309,13 @@ def generate_timetable(grade_info, subject_settings):
                         room,
                         num_slots=remaining,
                         period_limit=period_limit,
-                        allow_same_day=(num >= 5),
+                        allow_same_day=(num >= 4),
                     )
 
     # 5. Assign remaining lessons normally
-    for grade, subjects in subject_settings.items():
+    for subject, info in sorted(
+                subjects.items(), key=lambda item: item[1]["num"]
+            ):
         classes = range(1, grade_info[grade]["class_num"] + 1)
         for cls in classes:
             for subject, info in subjects.items():
@@ -339,7 +341,7 @@ def generate_timetable(grade_info, subject_settings):
                     teacher,
                     room,
                     num_slots=remaining,
-                    allow_same_day=(num >= 5),
+                    allow_same_day=(num >= 4),
                 )
 
     return df
