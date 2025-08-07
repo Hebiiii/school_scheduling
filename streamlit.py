@@ -410,10 +410,10 @@ def main():
                         max_selections=num if num else None,
                         key=f"{grade}_{subject}_day_period",
                     )
-                    period_limit = st.multiselect(
+                    period_limit = st.select_slider(
                         "時限制限",
-                        options=["なし"] + [f"{p}限" for p in periods],
-                        default=["なし"],
+                        options=[f"{p}限" for p in periods],
+                        value=("1限","6限"),
                         key=f"{grade}_{subject}_period_limit",
                     )
                     if num == 2:

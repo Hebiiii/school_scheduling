@@ -1,6 +1,5 @@
 import pandas as pd
 from functools import reduce
-import random
 
 # --- Helper functions to find unavailable slots ---
 def get_unavailable_day_periods(df, teacher=None, room=None, limit=1):
