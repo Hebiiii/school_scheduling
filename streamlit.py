@@ -285,7 +285,7 @@ def generate_timetable(grade_info, subject_settings):
     grade_info = deserialize_grade_info(grade_info)
     subject_settings = deserialize_subject_settings(subject_settings)
     validate_settings(grade_info, subject_settings)
-    df = build_base_df(serialize_grade_info(grade_info))
+    df = build_base_df(serialize_grade_info(grade_info)).copy()
 
     # 1. Assign courses with fixed (day, period)
     for grade, subjects in subject_settings.items():
