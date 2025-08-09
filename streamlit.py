@@ -377,83 +377,85 @@ def main():
         """,
         unsafe_allow_html=True,
     )
-
-    for subject in subjects:
-        st.markdown("---")
-        st.subheader(f"{subject_symbols[subject]} {subject}")
-        cols = st.columns(len(grades))
-        for col, grade in zip(cols, grades):
-            with col:
-                st.markdown(f"**{grade}年**")
-                num = st.number_input(
-                    "コマ数",
-                    min_value=0,
-                    value=default_periods[grade][subject],
-                    key=f"{grade}_{subject}_num",
-                )
-                teacher = st.multiselect(
-                    "担当教員",
-                    teacher_options[subject],
-                    default=["担任"],
-                    key=f"{grade}_{subject}_teacher",
-                )
-                room = st.selectbox(
-                    "教室",
-                    room_options[subject],
-                    key=f"{grade}_{subject}_room",
-                )
-                with st.popover("詳細設定"):
-                    day_period = st.multiselect(
-                        "曜日・時限の指定",
-                        options=[f"{d}曜 {p}限" for d, p in available_day_periods[grade]] + ["なし"],
-                        default=["なし"],
-                        max_selections=num if num else None,
-                        key=f"{grade}_{subject}_day_period",
+    with st.form("settings_form"):
+        for subject in subjects:
+            st.markdown("---")
+            st.subheader(f"{subject_symbols[subject]} {subject}")
+            cols = st.columns(len(grades))
+            for col, grade in zip(cols, grades):
+                with col:
+                    st.markdown(f"**{grade}年**")
+                    num = st.number_input(
+                        "コマ数",
+                        min_value=0,
+                        value=default_periods[grade][subject],
+                        key=f"{grade}_{subject}_num",
                     )
-                    period_limit = st.select_slider(
-                        "時限制限",
-                        options=[f"{p}限" for p in periods],
-                        value=("1限","6限"),
-                        key=f"{grade}_{subject}_period_limit",
+                    teacher = st.multiselect(
+                        "担当教員",
+                        teacher_options[subject],
+                        default=["担任"],
+                        key=f"{grade}_{subject}_teacher",
                     )
-                    if num == 2:
-                        st.checkbox(
-                            "連続授業にする",
-                            value=False,
-                            key=f"{grade}_{subject}_consecutive_bool",
+                    room = st.selectbox(
+                        "教室",
+                        room_options[subject],
+                        key=f"{grade}_{subject}_room",
+                    )
+                    with st.popover("詳細設定"):
+                        day_period = st.multiselect(
+                            "曜日・時限の指定",
+                            options=[f"{d}曜 {p}限" for d, p in available_day_periods[grade]] + ["なし"],
+                            default=["なし"],
+                            max_selections=num if num else None,
+                            key=f"{grade}_{subject}_day_period",
                         )
-                    elif num > 2:
+                        period_limit = st.select_slider(
+                            "時限制限",
+                            options=[f"{p}限" for p in periods],
+                            value=("1限","6限"),
+                            key=f"{grade}_{subject}_period_limit",
+                        )
+                        if num == 2:
+                            st.checkbox(
+                                "連続授業にする",
+                                value=False,
+                                key=f"{grade}_{subject}_consecutive_bool",
+                            )
+                        elif num > 2:
+                            st.number_input(
+                                "週何回連続授業にする？",
+                                value=0,
+                                min_value=0,
+                                max_value=num // 2,
+                                step=1,
+                                key=f"{grade}_{subject}_consecutive_num",
+                            )
                         st.number_input(
-                            "週何回連続授業にする？",
+                            "週何回クラス合同授業にする？",
                             value=0,
                             min_value=0,
-                            max_value=num // 2,
+                            max_value=num,
                             step=1,
-                            key=f"{grade}_{subject}_consecutive_num",
+                            key=f"{grade}_{subject}_joint_class",
                         )
-                    st.number_input(
-                        "週何回クラス合同授業にする？",
-                        value=0,
-                        min_value=0,
-                        max_value=num,
-                        step=1,
-                        key=f"{grade}_{subject}_joint_class",
-                    )
-    
-    st.markdown("---")
-    st.markdown("#### 選択された合計のコマ数/総コマ数")
-    summary_cols = st.columns(len(grades))
-    for col, grade in zip(summary_cols, grades):
-        total_selected = sum(
-            st.session_state.get(f"{grade}_{subject}_num", 0)
-            for subject in subjects
-        )
-        total_slots = 25 + len(grade_info[grade]["six_days"])
-        with col:
-            st.markdown(f"{grade}年: {total_selected}/{total_slots}")
 
-    st.markdown("---")
-    if st.button("時間割を生成"):
+        st.markdown("---")
+        st.markdown("#### 選択された合計のコマ数/総コマ数")
+        summary_cols = st.columns(len(grades))
+        for col, grade in zip(summary_cols, grades):
+            total_selected = sum(
+                st.session_state.get(f"{grade}_{subject}_num", 0)
+                for subject in subjects
+            )
+            total_slots = 25 + len(grade_info[grade]["six_days"])
+            with col:
+                st.markdown(f"{grade}年: {total_selected}/{total_slots}")
+
+        st.markdown("---")
+        submitted = st.form_submit_button("設定を反映")
+
+    if submitted:
         subject_settings = {}
         for grade in grades:
             subject_settings[grade] = {}
