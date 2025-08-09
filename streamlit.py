@@ -116,7 +116,74 @@ def get_available_day_periods(six_days):
 
 
 # ====== Timetable generation ======
+def serialize_grade_info(grade_info):
+    """Convert grade information dictionary into a tuple for caching."""
+    return tuple(
+        (grade, info["class_num"], tuple(info["six_days"]))
+        for grade, info in grade_info.items()
+    )
+
+
+def serialize_subject_settings(subject_settings):
+    """Convert subject settings dictionary into a tuple for caching."""
+    return tuple(
+        (
+            grade,
+            tuple(
+                (
+                    subject,
+                    s["num"],
+                    s["teacher"],
+                    s["room"],
+                    tuple(s["day_periods"]),
+                    tuple(s["period_limit"]) if s["period_limit"] else None,
+                    s["consecutive"],
+                    s["joint"],
+                )
+                for subject, s in subjects.items()
+            ),
+        )
+        for grade, subjects in subject_settings.items()
+    )
+
+
+def deserialize_grade_info(grade_info):
+    return {
+        grade: {"class_num": class_num, "six_days": list(six_days)}
+        for grade, class_num, six_days in grade_info
+    }
+
+
+def deserialize_subject_settings(subject_settings):
+    return {
+        grade: {
+            subject: {
+                "num": num,
+                "teacher": teacher,
+                "room": room,
+                "day_periods": list(day_periods),
+                "period_limit": list(period_limit) if period_limit else None,
+                "consecutive": consecutive,
+                "joint": joint,
+            }
+            for (
+                subject,
+                num,
+                teacher,
+                room,
+                day_periods,
+                period_limit,
+                consecutive,
+                joint,
+            ) in subjects
+        }
+        for grade, subjects in subject_settings
+    }
+
+
+@st.cache_data
 def build_base_df(grade_info):
+    grade_info = deserialize_grade_info(grade_info)
     rows = []
     for grade, info in grade_info.items():
         classes = range(1, info["class_num"] + 1)
@@ -212,9 +279,13 @@ def validate_settings(grade_info, subject_settings):
                 )
 
 
+
+@st.cache_data
 def generate_timetable(grade_info, subject_settings):
+    grade_info = deserialize_grade_info(grade_info)
+    subject_settings = deserialize_subject_settings(subject_settings)
     validate_settings(grade_info, subject_settings)
-    df = build_base_df(grade_info)
+    df = build_base_df(serialize_grade_info(grade_info))
 
     # 1. Assign courses with fixed (day, period)
     for grade, subjects in subject_settings.items():
@@ -489,7 +560,10 @@ def main():
                     "joint": joint,
                 }
         try:
-            df = generate_timetable(grade_info, subject_settings)
+            df = generate_timetable(
+                serialize_grade_info(grade_info),
+                serialize_subject_settings(subject_settings),
+            )
             st.success("時間割を生成しました")
             st.dataframe(df)
             csv = df.to_csv(index=False).encode("utf-8-sig")
