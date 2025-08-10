@@ -470,10 +470,10 @@ def main():
                         d, rest = dp.split("曜 ")
                         day_periods.append((d, int(rest.replace("限", ""))))
                 period_raw = st.session_state[f"{grade}_{subject}_period_limit"]
-                if "なし" in period_raw:
-                    period_limit = None
-                else:
-                    period_limit = [int(p.replace("限", "")) for p in period_raw]
+                start = int(period_raw[0].replace("限", ""))
+                end = int(period_raw[1].replace("限", ""))
+                period_limit = list(range(start, end + 1))
+                
                 if num == 2:
                     consecutive = 1 if st.session_state.get(f"{grade}_{subject}_consecutive_bool") else 0
                 elif num > 2:
