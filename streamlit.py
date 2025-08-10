@@ -214,7 +214,7 @@ def validate_settings(grade_info, subject_settings):
 
 def generate_timetable(grade_info, subject_settings):
     validate_settings(grade_info, subject_settings)
-    df = build_base_df(grade_info)
+    df = build_base_df(grade_info).copy()
 
     # 1. Assign courses with fixed (day, period)
     for grade, subjects in subject_settings.items():
@@ -453,7 +453,7 @@ def main():
                 st.markdown(f"{grade}年: {total_selected}/{total_slots}")
 
         st.markdown("---")
-        submitted = st.form_submit_button("設定を反映")
+        submitted = st.form_submit_button("時間割りを作成する")
 
     if submitted:
         subject_settings = {}
