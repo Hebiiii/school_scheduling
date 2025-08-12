@@ -377,7 +377,7 @@ def main():
         """,
         unsafe_allow_html=True,
     )
-    with st.form("settings_form"):
+    with st.form("settings_form", border=False):
         for subject in subjects:
             st.markdown("---")
             st.subheader(f"{subject_symbols[subject]} {subject}")
@@ -472,7 +472,10 @@ def main():
                 period_raw = st.session_state[f"{grade}_{subject}_period_limit"]
                 start = int(period_raw[0].replace("限", ""))
                 end = int(period_raw[1].replace("限", ""))
-                period_limit = list(range(start, end + 1))
+                if start == 1 and end == 6:
+                    period_limit = None
+                else:
+                    period_limit = list(range(start, end + 1))
                 
                 if num == 2:
                     consecutive = 1 if st.session_state.get(f"{grade}_{subject}_consecutive_bool") else 0
