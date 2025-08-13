@@ -27,13 +27,13 @@ default_periods = {
         "家庭科": 0, "総合": 0, "学活・道徳": 1, "生活": 3, "書写": 0},
     2: {"英語": 0, "算数": 5, "国語": 9, "理科": 0, "社会": 0, "図工": 2, "音楽": 2, "体育": 3,
         "家庭科": 0, "総合": 0, "学活・道徳": 1, "生活": 3, "書写": 0},
-    3: {"英語": 0, "算数": 5, "国語": 7, "理科": 2, "社会": 2, "図工": 1, "音楽": 2, "体育": 3,
+    3: {"英語": 1, "算数": 5, "国語": 7, "理科": 2, "社会": 2, "図工": 1, "音楽": 2, "体育": 3,
+        "家庭科": 0, "総合": 2, "学活・道徳": 1, "生活": 0, "書写": 0},
+    4: {"英語": 1, "算数": 5, "国語": 7, "理科": 2, "社会": 2, "図工": 2, "音楽": 2, "体育": 3,
         "家庭科": 0, "総合": 2, "学活・道徳": 1, "生活": 0, "書写": 1},
-    4: {"英語": 0, "算数": 5, "国語": 7, "理科": 2, "社会": 2, "図工": 2, "音楽": 2, "体育": 3,
-        "家庭科": 0, "総合": 2, "学活・道徳": 1, "生活": 0, "書写": 1},
-    5: {"英語": 1, "算数": 5, "国語": 5, "理科": 3, "社会": 3, "図工": 1, "音楽": 1, "体育": 3,
+    5: {"英語": 2, "算数": 5, "国語": 5, "理科": 2, "社会": 3, "図工": 1, "音楽": 1, "体育": 3,
         "家庭科": 2, "総合": 2, "学活・道徳": 1, "生活": 0, "書写": 1},
-    6: {"英語": 1, "算数": 5, "国語": 5, "理科": 3, "社会": 3, "図工": 1, "音楽": 1, "体育": 3,
+    6: {"英語": 2, "算数": 5, "国語": 5, "理科": 3, "社会": 3, "図工": 1, "音楽": 1, "体育": 3,
         "家庭科": 2, "総合": 2, "学活・道徳": 1, "生活": 0, "書写": 1},
 }
 
@@ -60,8 +60,8 @@ room_options = {
     "理科": ["教室", "理科室"],
     "社会": ["教室", "社会科室"],
     "図工": ["教室", "図工室"],
-    "音楽": ["教室", "音楽室①", "音楽室②"],
-    "体育": ["教室", "体育館"],
+    "音楽": ["教室","音楽室(高学年用)", "音楽室(低学年用)"],
+    "体育": ["教室", "体育館・運動場"],
     "家庭科": ["教室", "家庭科室"],
     "総合": ["教室", "特別教室"],
     "学活・道徳": ["教室", "特別教室"],
@@ -247,8 +247,12 @@ def generate_timetable(grade_info, subject_settings):
                 teacher, room = joint_labels(
                     info["teacher"], info["room"], grade, classes
                 )
+                if subject == "体育":
+                    capacity_limit = 2
+                else:
+                    capacity_limit = 1
                 df = assign_joint_course(
-                    df, subject, group, teacher=teacher, room=room
+                    df, subject, group, teacher=teacher, room=room, capacity_limit=capacity_limit
                 )
 
     # 3. Assign consecutive lessons
@@ -263,6 +267,12 @@ def generate_timetable(grade_info, subject_settings):
                 if remaining <= 0:
                     continue
                 consecutive = info["consecutive"]
+
+                if subject == "体育":
+                    capacity_limit = 2
+                else:
+                    capacity_limit = 1
+
                 if consecutive:
                     teacher, room = class_specific_labels(
                         info["teacher"], info["room"], grade, cls
@@ -275,6 +285,7 @@ def generate_timetable(grade_info, subject_settings):
                         teacher,
                         room,
                         num_slots=consecutive,
+                        capacity_limit=capacity_limit,
                         consecutive=True,
                         allow_same_day=num >= 4,
                     )
@@ -296,6 +307,12 @@ def generate_timetable(grade_info, subject_settings):
                 if remaining <= 0:
                     continue
                 period_limit = info["period_limit"]
+
+                if subject == "体育":
+                    capacity_limit = 2
+                else:
+                    capacity_limit = 1
+
                 if period_limit:
                     teacher, room = class_specific_labels(
                         info["teacher"], info["room"], grade, cls
@@ -308,11 +325,91 @@ def generate_timetable(grade_info, subject_settings):
                         teacher,
                         room,
                         num_slots=remaining,
+                        capacity_limit=capacity_limit,
                         period_limit=period_limit,
                         allow_same_day=(num >= 4),
                     )
+    
+    # 5. Assign remaining lessons with no specific settings
+    for grade, subjects in subject_settings.items():
+        classes = range(1, grade_info[grade]["class_num"] + 1)
+        for cls in classes:
+            for subject, info in subjects.items():
+                num = info["num"]
+                if num <= 0:
+                    continue
+                remaining = (
+                    num
+                    - info["joint"]
+                    - len(info["day_periods"])
+                    - 2 * info["consecutive"]
+                )
+                if remaining > 0 and remaining < num:
+                    teacher, room = class_specific_labels(
+                        info["teacher"], info["room"], grade, cls
+                    )
+                else:
+                    continue
 
-    # 5. Assign remaining lessons normally
+                if subject == "体育":
+                    capacity_limit = 2
+                else:
+                    capacity_limit = 1
+
+                df = assign_course(
+                    df,
+                    grade,
+                    cls,
+                    subject,
+                    teacher,
+                    room,
+                    num_slots=remaining,
+                    capacity_limit=capacity_limit,
+                    allow_same_day=(num >= 4),
+                )
+    
+    # 6. assign courses for teacher or room specific lessons
+    for grade, subjects in subject_settings.items():
+        classes = range(1, grade_info[grade]["class_num"] + 1)
+        for cls in classes:
+            for subject, info in subjects.items():
+                num = info["num"]
+                if num <= 0:
+                    continue
+                remaining = (
+                    num
+                    - info["joint"]
+                    - len(info["day_periods"])
+                    - 2 * info["consecutive"]
+                )
+                if remaining <= 0:
+                    continue
+
+                teacher, room = class_specific_labels(
+                    info["teacher"], info["room"], grade, cls
+                )
+
+                if info["teacher"] == "担任" or info["room"] == "教室":
+                    continue
+
+                if subject == "体育":
+                    capacity_limit = 2
+                else:
+                    capacity_limit = 1
+
+                df = assign_course(
+                    df,
+                    grade,
+                    cls,
+                    subject,
+                    teacher,
+                    room,
+                    num_slots=remaining,
+                    capacity_limit=capacity_limit,
+                    allow_same_day=(num >= 4),
+                )
+
+    # 7. Assign remaining lessons normally
     for grade, subjects in subject_settings.items():
         sorted_subjects = sorted(
             subjects.items(), key=lambda item: item[1]["num"]
@@ -330,9 +427,16 @@ def generate_timetable(grade_info, subject_settings):
                 )
                 if remaining <= 0 or info["period_limit"]:
                     continue
+
                 teacher, room = class_specific_labels(
                     info["teacher"], info["room"], grade, cls
                 )
+
+                if subject == "体育":
+                    capacity_limit = 2
+                else:
+                    capacity_limit = 1
+
                 df = assign_course(
                     df,
                     grade,
@@ -341,6 +445,7 @@ def generate_timetable(grade_info, subject_settings):
                     teacher,
                     room,
                     num_slots=remaining,
+                    capacity_limit=capacity_limit,
                     allow_same_day=(num >= 4),
                 )
 
@@ -394,12 +499,18 @@ def main():
                     teacher = st.multiselect(
                         "担当教員",
                         teacher_options[subject],
-                        default=["担任"],
+                        default=teacher_options[subject][2] if subject in ["音楽", "体育", "理科"] else ["担任"],
                         key=f"{grade}_{subject}_teacher",
                     )
+                    idx = 0
+                    if subject in ["音楽", "体育", "理科", "家庭科"]:
+                        idx = 1
+                    if subject == "音楽" and grade in [1, 2]:
+                        idx = 2
                     room = st.selectbox(
                         "教室",
                         room_options[subject],
+                        index=idx,
                         key=f"{grade}_{subject}_room",
                     )
                     with st.popover("詳細設定"):
@@ -441,18 +552,17 @@ def main():
                         )
 
         st.markdown("---")
-        st.markdown("#### 選択された合計のコマ数/総コマ数")
-        summary_cols = st.columns(len(grades))
-        for col, grade in zip(summary_cols, grades):
-            total_selected = sum(
-                st.session_state.get(f"{grade}_{subject}_num", 0)
-                for subject in subjects
-            )
-            total_slots = 25 + len(grade_info[grade]["six_days"])
-            with col:
-                st.markdown(f"{grade}年: {total_selected}/{total_slots}")
+        # st.markdown("#### 選択された合計のコマ数/総コマ数")
+        # summary_cols = st.columns(len(grades))
+        # for col, grade in zip(summary_cols, grades):
+        #     total_selected = sum(
+        #         st.session_state.get(f"{grade}_{subject}_num", 0)
+        #         for subject in subjects
+        #     )
+        #     total_slots = 25 + len(grade_info[grade]["six_days"])
+        #     with col:
+        #         st.markdown(f"{grade}年: {total_selected}/{total_slots}")
 
-        st.markdown("---")
         submitted = st.form_submit_button("時間割りを作成する")
 
     if submitted:
