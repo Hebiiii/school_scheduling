@@ -216,6 +216,15 @@ def generate_timetable(grade_info, subject_settings):
     validate_settings(grade_info, subject_settings)
     df = build_base_df(grade_info).copy()
 
+    def count_assigned(grade, cls, subject):
+        """Return number of slots already filled for a subject."""
+        mask = (
+            (df.grade == grade)
+            & (df["class"] == cls)
+            & (df.subject == subject)
+        )
+        return df[mask].shape[0]
+
     # 1. Assign courses with fixed (day, period)
     for grade, subjects in subject_settings.items():
         classes = range(1, grade_info[grade]["class_num"] + 1)
@@ -261,34 +270,35 @@ def generate_timetable(grade_info, subject_settings):
         for cls in classes:
             for subject, info in subjects.items():
                 num = info["num"]
-                if num <= 0:
-                    continue
-                remaining = num - info["joint"] - len(info["day_periods"])
-                if remaining <= 0:
-                    continue
                 consecutive = info["consecutive"]
+                if num <= 0 or not consecutive:
+                    continue
+                assigned = count_assigned(grade, cls, subject)
+                remaining = num - assigned
+                blocks = min(consecutive, remaining // 2)
+                if blocks <= 0:
+                    continue
 
                 if subject == "体育":
                     capacity_limit = 2
                 else:
                     capacity_limit = 1
 
-                if consecutive:
-                    teacher, room = class_specific_labels(
-                        info["teacher"], info["room"], grade, cls
-                    )
-                    df = assign_course(
-                        df,
-                        grade,
-                        cls,
-                        subject,
-                        teacher,
-                        room,
-                        num_slots=consecutive,
-                        capacity_limit=capacity_limit,
-                        consecutive=True,
-                        allow_same_day=num >= 4,
-                    )
+                teacher, room = class_specific_labels(
+                    info["teacher"], info["room"], grade, cls
+                )
+                df = assign_course(
+                    df,
+                    grade,
+                    cls,
+                    subject,
+                    teacher,
+                    room,
+                    num_slots=blocks,
+                    capacity_limit=capacity_limit,
+                    consecutive=True,
+                    allow_same_day=num >= 4,
+                )
 
     # 4. Assign lessons with period limits
     for grade, subjects in subject_settings.items():
@@ -296,39 +306,34 @@ def generate_timetable(grade_info, subject_settings):
         for cls in classes:
             for subject, info in subjects.items():
                 num = info["num"]
-                if num <= 0:
+                period_limit = info["period_limit"]
+                if num <= 0 or not period_limit:
                     continue
-                remaining = (
-                    num
-                    - info["joint"]
-                    - len(info["day_periods"])
-                    - 2 * info["consecutive"]
-                )
+                assigned = count_assigned(grade, cls, subject)
+                remaining = num - assigned
                 if remaining <= 0:
                     continue
-                period_limit = info["period_limit"]
 
                 if subject == "体育":
                     capacity_limit = 2
                 else:
                     capacity_limit = 1
 
-                if period_limit:
-                    teacher, room = class_specific_labels(
-                        info["teacher"], info["room"], grade, cls
-                    )
-                    df = assign_course(
-                        df,
-                        grade,
-                        cls,
-                        subject,
-                        teacher,
-                        room,
-                        num_slots=remaining,
-                        capacity_limit=capacity_limit,
-                        period_limit=period_limit,
-                        allow_same_day=(num >= 4),
-                    )
+                teacher, room = class_specific_labels(
+                    info["teacher"], info["room"], grade, cls
+                )
+                df = assign_course(
+                    df,
+                    grade,
+                    cls,
+                    subject,
+                    teacher,
+                    room,
+                    num_slots=remaining,
+                    capacity_limit=capacity_limit,
+                    period_limit=period_limit,
+                    allow_same_day=(num >= 4),
+                )
     
     # 5. Assign remaining lessons with no specific settings
     for grade, subjects in subject_settings.items():
@@ -338,18 +343,14 @@ def generate_timetable(grade_info, subject_settings):
                 num = info["num"]
                 if num <= 0:
                     continue
-                remaining = (
-                    num
-                    - info["joint"]
-                    - len(info["day_periods"])
-                    - 2 * info["consecutive"]
-                )
-                if remaining > 0 and remaining < num:
-                    teacher, room = class_specific_labels(
-                        info["teacher"], info["room"], grade, cls
-                    )
-                else:
+                assigned = count_assigned(grade, cls, subject)
+                remaining = num - assigned
+                if not (0 < remaining < num):
                     continue
+
+                teacher, room = class_specific_labels(
+                    info["teacher"], info["room"], grade, cls
+                )
 
                 if subject == "体育":
                     capacity_limit = 2
@@ -368,7 +369,7 @@ def generate_timetable(grade_info, subject_settings):
                     allow_same_day=(num >= 4),
                 )
     
-    # 6. assign courses for teacher or room specific lessons
+    # 6. Assign courses for teacher or room specific lessons
     for grade, subjects in subject_settings.items():
         classes = range(1, grade_info[grade]["class_num"] + 1)
         for cls in classes:
@@ -376,21 +377,16 @@ def generate_timetable(grade_info, subject_settings):
                 num = info["num"]
                 if num <= 0:
                     continue
-                remaining = (
-                    num
-                    - info["joint"]
-                    - len(info["day_periods"])
-                    - 2 * info["consecutive"]
-                )
+                if info["teacher"] == "担任" or info["room"] == "教室":
+                    continue
+                assigned = count_assigned(grade, cls, subject)
+                remaining = num - assigned
                 if remaining <= 0:
                     continue
 
                 teacher, room = class_specific_labels(
                     info["teacher"], info["room"], grade, cls
                 )
-
-                if info["teacher"] == "担任" or info["room"] == "教室":
-                    continue
 
                 if subject == "体育":
                     capacity_limit = 2
@@ -417,15 +413,11 @@ def generate_timetable(grade_info, subject_settings):
         for subject, info in sorted_subjects:
             for cls in range(1, grade_info[grade]["class_num"] + 1):
                 num = info["num"]
-                if num <= 0:
+                if num <= 0 or info["period_limit"]:
                     continue
-                remaining = (
-                    num
-                    - info["joint"]
-                    - len(info["day_periods"])
-                    - 2 * info["consecutive"]
-                )
-                if remaining <= 0 or info["period_limit"]:
+                assigned = count_assigned(grade, cls, subject)
+                remaining = num - assigned
+                if remaining <= 0:
                     continue
 
                 teacher, room = class_specific_labels(
