@@ -509,7 +509,7 @@ def main():
                         day_period = st.multiselect(
                             "曜日・時限の指定",
                             options=[f"{d}曜 {p}限" for d, p in available_day_periods[grade]] + ["なし"],
-                            default=["なし"],
+                            default=["月曜 1限"] if subject == "学活・道徳" else ["なし"],
                             max_selections=num if num else None,
                             key=f"{grade}_{subject}_day_period",
                         )
