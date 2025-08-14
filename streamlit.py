@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import re
+import random
+import numpy as np
 from _functions import assign_course, assign_fixed_course, assign_joint_course
 
 # ====== Constants ======
@@ -212,236 +214,245 @@ def validate_settings(grade_info, subject_settings):
                 )
 
 
-def generate_timetable(grade_info, subject_settings):
+def generate_timetable(grade_info, subject_settings, max_attempts=100):
     validate_settings(grade_info, subject_settings)
-    df = build_base_df(grade_info).copy()
+    last_error = None
+    for attempt in range(max_attempts):
+        random.seed(attempt)
+        np.random.seed(attempt)
+        df = build_base_df(grade_info).copy()
 
-    def count_assigned(grade, cls, subject):
-        """Return number of slots already filled for a subject."""
-        mask = (
-            (df.grade == grade)
-            & (df["class"] == cls)
-            & (df.subject == subject)
-        )
-        return df[mask].shape[0]
+        def count_assigned(grade, cls, subject):
+            """Return number of slots already filled for a subject."""
+            mask = (
+                (df.grade == grade)
+                & (df["class"] == cls)
+                & (df.subject == subject)
+            )
+            return df[mask].shape[0]
 
-    # 1. Assign courses with fixed (day, period)
-    for grade, subjects in subject_settings.items():
-        classes = range(1, grade_info[grade]["class_num"] + 1)
-        for cls in classes:
-            for subject, info in subjects.items():
-                if info["num"] <= 0:
-                    continue
-                day_periods = info["day_periods"]
-                if day_periods:
-                    teacher, room = class_specific_labels(
-                        info["teacher"], info["room"], grade, cls
-                    )
-                    df = assign_fixed_course(
-                        df,
-                        grade,
-                        cls,
-                        subject,
-                        teacher,
-                        room,
-                        day_periods,
-                    )
+        try:
+            # 1. Assign courses with fixed (day, period)
+            for grade, subjects in subject_settings.items():
+                classes = range(1, grade_info[grade]["class_num"] + 1)
+                for cls in classes:
+                    for subject, info in subjects.items():
+                        if info["num"] <= 0:
+                            continue
+                        day_periods = info["day_periods"]
+                        if day_periods:
+                            teacher, room = class_specific_labels(
+                                info["teacher"], info["room"], grade, cls
+                            )
+                            df = assign_fixed_course(
+                                df,
+                                grade,
+                                cls,
+                                subject,
+                                teacher,
+                                room,
+                                day_periods,
+                            )
 
-    # 2. Assign joint classes
-    for grade, subjects in subject_settings.items():
-        classes = range(1, grade_info[grade]["class_num"] + 1)
-        for subject, info in subjects.items():
-            for _ in range(info["joint"]):
-                group = [(grade, c) for c in classes]
-                teacher, room = joint_labels(
-                    info["teacher"], info["room"], grade, classes
+            # 2. Assign joint classes
+            for grade, subjects in subject_settings.items():
+                classes = range(1, grade_info[grade]["class_num"] + 1)
+                for subject, info in subjects.items():
+                    for _ in range(info["joint"]):
+                        group = [(grade, c) for c in classes]
+                        teacher, room = joint_labels(
+                            info["teacher"], info["room"], grade, classes
+                        )
+                        if subject == "体育":
+                            capacity_limit = 2
+                        else:
+                            capacity_limit = 1
+                        df = assign_joint_course(
+                            df, subject, group, teacher=teacher, room=room, capacity_limit=capacity_limit
+                        )
+
+            # 3. Assign consecutive lessons
+            for grade, subjects in subject_settings.items():
+                classes = range(1, grade_info[grade]["class_num"] + 1)
+                for cls in classes:
+                    for subject, info in subjects.items():
+                        num = info["num"]
+                        consecutive = info["consecutive"]
+                        if num <= 0 or not consecutive:
+                            continue
+                        assigned = count_assigned(grade, cls, subject)
+                        remaining = num - assigned
+                        blocks = min(consecutive, remaining // 2)
+                        if blocks <= 0:
+                            continue
+
+                        if subject == "体育":
+                            capacity_limit = 2
+                        else:
+                            capacity_limit = 1
+
+                        teacher, room = class_specific_labels(
+                            info["teacher"], info["room"], grade, cls
+                        )
+                        df = assign_course(
+                            df,
+                            grade,
+                            cls,
+                            subject,
+                            teacher,
+                            room,
+                            num_slots=blocks,
+                            capacity_limit=capacity_limit,
+                            consecutive=True,
+                            allow_same_day=num >= 4,
+                        )
+
+            # 4. Assign lessons with period limits
+            for grade, subjects in subject_settings.items():
+                classes = range(1, grade_info[grade]["class_num"] + 1)
+                for cls in classes:
+                    for subject, info in subjects.items():
+                        num = info["num"]
+                        period_limit = info["period_limit"]
+                        if num <= 0 or not period_limit:
+                            continue
+                        assigned = count_assigned(grade, cls, subject)
+                        remaining = num - assigned
+                        if remaining <= 0:
+                            continue
+
+                        if subject == "体育":
+                            capacity_limit = 2
+                        else:
+                            capacity_limit = 1
+
+                        teacher, room = class_specific_labels(
+                            info["teacher"], info["room"], grade, cls
+                        )
+                        df = assign_course(
+                            df,
+                            grade,
+                            cls,
+                            subject,
+                            teacher,
+                            room,
+                            num_slots=remaining,
+                            capacity_limit=capacity_limit,
+                            period_limit=period_limit,
+                            allow_same_day=(num >= 4),
+                        )
+
+            # 5. Assign remaining lessons with no specific settings
+            for grade, subjects in subject_settings.items():
+                classes = range(1, grade_info[grade]["class_num"] + 1)
+                for cls in classes:
+                    for subject, info in subjects.items():
+                        num = info["num"]
+                        if num <= 0:
+                            continue
+                        assigned = count_assigned(grade, cls, subject)
+                        remaining = num - assigned
+                        if not (0 < remaining < num):
+                            continue
+
+                        teacher, room = class_specific_labels(
+                            info["teacher"], info["room"], grade, cls
+                        )
+
+                        if subject == "体育":
+                            capacity_limit = 2
+                        else:
+                            capacity_limit = 1
+
+                        df = assign_course(
+                            df,
+                            grade,
+                            cls,
+                            subject,
+                            teacher,
+                            room,
+                            num_slots=remaining,
+                            capacity_limit=capacity_limit,
+                            allow_same_day=(num >= 4),
+                        )
+
+            # 6. Assign courses for teacher or room specific lessons
+            for grade, subjects in subject_settings.items():
+                classes = range(1, grade_info[grade]["class_num"] + 1)
+                for cls in classes:
+                    for subject, info in subjects.items():
+                        num = info["num"]
+                        if num <= 0:
+                            continue
+                        if info["teacher"] == "担任" or info["room"] == "教室":
+                            continue
+                        assigned = count_assigned(grade, cls, subject)
+                        remaining = num - assigned
+                        if remaining <= 0:
+                            continue
+
+                        teacher, room = class_specific_labels(
+                            info["teacher"], info["room"], grade, cls
+                        )
+
+                        if subject == "体育":
+                            capacity_limit = 2
+                        else:
+                            capacity_limit = 1
+
+                        df = assign_course(
+                            df,
+                            grade,
+                            cls,
+                            subject,
+                            teacher,
+                            room,
+                            num_slots=remaining,
+                            capacity_limit=capacity_limit,
+                            allow_same_day=(num >= 4),
+                        )
+
+            # 7. Assign remaining lessons normally
+            for grade, subjects in subject_settings.items():
+                sorted_subjects = sorted(
+                    subjects.items(), key=lambda item: item[1]["num"]
                 )
-                if subject == "体育":
-                    capacity_limit = 2
-                else:
-                    capacity_limit = 1
-                df = assign_joint_course(
-                    df, subject, group, teacher=teacher, room=room, capacity_limit=capacity_limit
-                )
+                for subject, info in sorted_subjects:
+                    for cls in range(1, grade_info[grade]["class_num"] + 1):
+                        num = info["num"]
+                        if num <= 0 or info["period_limit"]:
+                            continue
+                        assigned = count_assigned(grade, cls, subject)
+                        remaining = num - assigned
+                        if remaining <= 0:
+                            continue
 
-    # 3. Assign consecutive lessons
-    for grade, subjects in subject_settings.items():
-        classes = range(1, grade_info[grade]["class_num"] + 1)
-        for cls in classes:
-            for subject, info in subjects.items():
-                num = info["num"]
-                consecutive = info["consecutive"]
-                if num <= 0 or not consecutive:
-                    continue
-                assigned = count_assigned(grade, cls, subject)
-                remaining = num - assigned
-                blocks = min(consecutive, remaining // 2)
-                if blocks <= 0:
-                    continue
+                        teacher, room = class_specific_labels(
+                            info["teacher"], info["room"], grade, cls
+                        )
 
-                if subject == "体育":
-                    capacity_limit = 2
-                else:
-                    capacity_limit = 1
+                        if subject == "体育":
+                            capacity_limit = 2
+                        else:
+                            capacity_limit = 1
 
-                teacher, room = class_specific_labels(
-                    info["teacher"], info["room"], grade, cls
-                )
-                df = assign_course(
-                    df,
-                    grade,
-                    cls,
-                    subject,
-                    teacher,
-                    room,
-                    num_slots=blocks,
-                    capacity_limit=capacity_limit,
-                    consecutive=True,
-                    allow_same_day=num >= 4,
-                )
+                        df = assign_course(
+                            df,
+                            grade,
+                            cls,
+                            subject,
+                            teacher,
+                            room,
+                            num_slots=remaining,
+                            capacity_limit=capacity_limit,
+                            allow_same_day=(num >= 4),
+                        )
 
-    # 4. Assign lessons with period limits
-    for grade, subjects in subject_settings.items():
-        classes = range(1, grade_info[grade]["class_num"] + 1)
-        for cls in classes:
-            for subject, info in subjects.items():
-                num = info["num"]
-                period_limit = info["period_limit"]
-                if num <= 0 or not period_limit:
-                    continue
-                assigned = count_assigned(grade, cls, subject)
-                remaining = num - assigned
-                if remaining <= 0:
-                    continue
-
-                if subject == "体育":
-                    capacity_limit = 2
-                else:
-                    capacity_limit = 1
-
-                teacher, room = class_specific_labels(
-                    info["teacher"], info["room"], grade, cls
-                )
-                df = assign_course(
-                    df,
-                    grade,
-                    cls,
-                    subject,
-                    teacher,
-                    room,
-                    num_slots=remaining,
-                    capacity_limit=capacity_limit,
-                    period_limit=period_limit,
-                    allow_same_day=(num >= 4),
-                )
-    
-    # 5. Assign remaining lessons with no specific settings
-    for grade, subjects in subject_settings.items():
-        classes = range(1, grade_info[grade]["class_num"] + 1)
-        for cls in classes:
-            for subject, info in subjects.items():
-                num = info["num"]
-                if num <= 0:
-                    continue
-                assigned = count_assigned(grade, cls, subject)
-                remaining = num - assigned
-                if not (0 < remaining < num):
-                    continue
-
-                teacher, room = class_specific_labels(
-                    info["teacher"], info["room"], grade, cls
-                )
-
-                if subject == "体育":
-                    capacity_limit = 2
-                else:
-                    capacity_limit = 1
-
-                df = assign_course(
-                    df,
-                    grade,
-                    cls,
-                    subject,
-                    teacher,
-                    room,
-                    num_slots=remaining,
-                    capacity_limit=capacity_limit,
-                    allow_same_day=(num >= 4),
-                )
-    
-    # 6. Assign courses for teacher or room specific lessons
-    for grade, subjects in subject_settings.items():
-        classes = range(1, grade_info[grade]["class_num"] + 1)
-        for cls in classes:
-            for subject, info in subjects.items():
-                num = info["num"]
-                if num <= 0:
-                    continue
-                if info["teacher"] == "担任" or info["room"] == "教室":
-                    continue
-                assigned = count_assigned(grade, cls, subject)
-                remaining = num - assigned
-                if remaining <= 0:
-                    continue
-
-                teacher, room = class_specific_labels(
-                    info["teacher"], info["room"], grade, cls
-                )
-
-                if subject == "体育":
-                    capacity_limit = 2
-                else:
-                    capacity_limit = 1
-
-                df = assign_course(
-                    df,
-                    grade,
-                    cls,
-                    subject,
-                    teacher,
-                    room,
-                    num_slots=remaining,
-                    capacity_limit=capacity_limit,
-                    allow_same_day=(num >= 4),
-                )
-
-    # 7. Assign remaining lessons normally
-    for grade, subjects in subject_settings.items():
-        sorted_subjects = sorted(
-            subjects.items(), key=lambda item: item[1]["num"]
-        )
-        for subject, info in sorted_subjects:
-            for cls in range(1, grade_info[grade]["class_num"] + 1):
-                num = info["num"]
-                if num <= 0 or info["period_limit"]:
-                    continue
-                assigned = count_assigned(grade, cls, subject)
-                remaining = num - assigned
-                if remaining <= 0:
-                    continue
-
-                teacher, room = class_specific_labels(
-                    info["teacher"], info["room"], grade, cls
-                )
-
-                if subject == "体育":
-                    capacity_limit = 2
-                else:
-                    capacity_limit = 1
-
-                df = assign_course(
-                    df,
-                    grade,
-                    cls,
-                    subject,
-                    teacher,
-                    room,
-                    num_slots=remaining,
-                    capacity_limit=capacity_limit,
-                    allow_same_day=(num >= 4),
-                )
-
-    return df
+            return df
+        except RuntimeError as e:
+            last_error = e
+            continue
+    raise last_error
 
 
 # ====== Main UI ======
