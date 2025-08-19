@@ -214,10 +214,13 @@ def validate_settings(grade_info, subject_settings):
                 )
 
 
-def generate_timetable(grade_info, subject_settings, max_attempts=100):
+def generate_timetable(grade_info, subject_settings, max_attempts=100, progress_callback=None):
     validate_settings(grade_info, subject_settings)
+    total_steps = 7
     last_error = None
     for attempt in range(max_attempts):
+        if progress_callback:
+            progress_callback(0)
         random.seed(attempt)
         np.random.seed(attempt)
         df = build_base_df(grade_info).copy()
@@ -254,6 +257,9 @@ def generate_timetable(grade_info, subject_settings, max_attempts=100):
                                 day_periods,
                             )
 
+            if progress_callback:
+                progress_callback(int(1 / total_steps * 100))
+
             # 2. Assign joint classes
             for grade, subjects in subject_settings.items():
                 classes = range(1, grade_info[grade]["class_num"] + 1)
@@ -270,6 +276,9 @@ def generate_timetable(grade_info, subject_settings, max_attempts=100):
                         df = assign_joint_course(
                             df, subject, group, teacher=teacher, room=room, capacity_limit=capacity_limit
                         )
+
+            if progress_callback:
+                progress_callback(int(2 / total_steps * 100))
 
             # 3. Assign consecutive lessons
             for grade, subjects in subject_settings.items():
@@ -307,6 +316,9 @@ def generate_timetable(grade_info, subject_settings, max_attempts=100):
                             allow_same_day=num >= 4,
                         )
 
+            if progress_callback:
+                progress_callback(int(3 / total_steps * 100))
+
             # 4. Assign lessons with period limits
             for grade, subjects in subject_settings.items():
                 classes = range(1, grade_info[grade]["class_num"] + 1)
@@ -342,6 +354,9 @@ def generate_timetable(grade_info, subject_settings, max_attempts=100):
                             allow_same_day=(num >= 4),
                         )
 
+            if progress_callback:
+                progress_callback(int(4 / total_steps * 100))
+
             # 5. Assign remaining lessons with no specific settings
             for grade, subjects in subject_settings.items():
                 classes = range(1, grade_info[grade]["class_num"] + 1)
@@ -375,6 +390,9 @@ def generate_timetable(grade_info, subject_settings, max_attempts=100):
                             capacity_limit=capacity_limit,
                             allow_same_day=(num >= 4),
                         )
+
+            if progress_callback:
+                progress_callback(int(5 / total_steps * 100))
 
             # 6. Assign courses for teacher or room specific lessons
             for grade, subjects in subject_settings.items():
@@ -412,6 +430,9 @@ def generate_timetable(grade_info, subject_settings, max_attempts=100):
                             allow_same_day=(num >= 4),
                         )
 
+            if progress_callback:
+                progress_callback(int(6 / total_steps * 100))
+
             # 7. Assign remaining lessons normally
             for grade, subjects in subject_settings.items():
                 sorted_subjects = sorted(
@@ -447,6 +468,9 @@ def generate_timetable(grade_info, subject_settings, max_attempts=100):
                             capacity_limit=capacity_limit,
                             allow_same_day=(num >= 4),
                         )
+
+            if progress_callback:
+                progress_callback(100)
 
             return df
         except RuntimeError as e:
@@ -589,7 +613,7 @@ def main():
                     period_limit = None
                 else:
                     period_limit = list(range(start, end + 1))
-                
+
                 if num == 2:
                     consecutive = 1 if st.session_state.get(f"{grade}_{subject}_consecutive_bool") else 0
                 elif num > 2:
@@ -606,13 +630,24 @@ def main():
                     "consecutive": consecutive,
                     "joint": joint,
                 }
+
+        progress_bar = st.progress(0)
+
+        def update_progress(v):
+            progress_bar.progress(v)
+
         try:
-            df = generate_timetable(grade_info, subject_settings)
+            with st.spinner("時間割を作成中..."):
+                df = generate_timetable(
+                    grade_info, subject_settings, progress_callback=update_progress
+                )
+            progress_bar.empty()
             st.success("時間割を生成しました")
             st.dataframe(df)
             csv = df.to_csv(index=False).encode("utf-8-sig")
             st.download_button("CSVをダウンロード", csv, "timetable.csv", "text/csv")
         except RuntimeError as e:
+            progress_bar.empty()
             msg = str(e)
             m = re.search(r"Slot \((.+), (\d+)\) for (\d+)-(\d+) (.+)", msg)
             if m:
@@ -630,6 +665,7 @@ def main():
             else:
                 st.error(f"エラー: {msg}")
         except Exception as e:
+            progress_bar.empty()
             st.error(f"エラー: {e}")
 
 
