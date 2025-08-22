@@ -4,7 +4,12 @@ import re
 import random
 import numpy as np
 from _functions import assign_course, assign_fixed_course, assign_joint_course
-from export_utils import export_class_schedule, export_teacher_schedule, export_subject_summary
+from export_utils import (
+    export_class_schedule,
+    export_teacher_schedule,
+    export_room_usage,
+    export_subject_summary,
+)
 
 # ====== Constants ======
 subjects = ["国語", "算数", "英語", "理科", "社会", "総合", "学活・道徳", "図工", "音楽", "体育", "家庭科", "生活", "書写"]
@@ -659,7 +664,7 @@ def main():
             st.success("時間割を生成しました")
             st.dataframe(df)
 
-            cols = st.columns(4)
+            cols = st.columns(5)
             with cols[0]:
                 st.download_button(
                     "クラスごとの時間割をExcelでダウンロード",
@@ -676,15 +681,22 @@ def main():
                 )
             with cols[2]:
                 st.download_button(
+                    "教室ごとの使用状況をExcelでダウンロード",
+                    export_room_usage(df),
+                    file_name="room_usage.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            with cols[3]:
+                st.download_button(
                     "教科ごとの時間割をExcelでダウンロード",
                     export_subject_summary(df),
                     file_name="subject_summary.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
-            with cols[3]:
+            with cols[4]:
                 csv = df.to_csv(index=False).encode("utf-8")
                 st.download_button(
-                    "すべてのデータをExcelでダウンロード",
+                    "すべてのデータをCSVでダウンロード",
                     csv,
                     file_name="timetable.csv",
                     mime="text/csv",
