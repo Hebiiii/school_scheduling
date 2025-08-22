@@ -4,6 +4,7 @@ import re
 import random
 import numpy as np
 from _functions import assign_course, assign_fixed_course, assign_joint_course
+from export_utils import export_class_schedule, export_teacher_schedule, export_subject_summary
 
 # ====== Constants ======
 subjects = ["国語", "算数", "英語", "理科", "社会", "総合", "学活・道徳", "図工", "音楽", "体育", "家庭科", "生活", "書写"]
@@ -657,8 +658,37 @@ def main():
             progress_bar.empty()
             st.success("時間割を生成しました")
             st.dataframe(df)
-            csv = df.to_csv(index=False).encode("utf-8-sig")
-            st.download_button("CSVをダウンロード", csv, "timetable.csv", "text/csv")
+
+            cols = st.columns(4)
+            with cols[0]:
+                st.download_button(
+                    "クラスごとの時間割をExcelでダウンロード",
+                    export_class_schedule(df),
+                    file_name="class_schedule.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            with cols[1]:
+                st.download_button(
+                    "教員ごとの時間割をExcelでダウンロード",
+                    export_teacher_schedule(df),
+                    file_name="teacher_schedule.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            with cols[2]:
+                st.download_button(
+                    "教科ごとの時間割をExcelでダウンロード",
+                    export_subject_summary(df),
+                    file_name="subject_summary.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            with cols[3]:
+                csv = df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "すべてのデータをExcelでダウンロード",
+                    csv,
+                    file_name="timetable.csv",
+                    mime="text/csv",
+                )
         except RuntimeError as e:
             progress_bar.empty()
             msg = str(e)

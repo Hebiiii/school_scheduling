@@ -1,0 +1,137 @@
+import pandas as pd
+from io import BytesIO
+import re
+import io
+import openpyxl
+import xlsxwriter
+
+def export_class_schedule(df: pd.DataFrame) -> bytes:
+    """Create an Excel file of class schedules from a timetable DataFrame.
+
+    Parameters
+    ----------
+    df: DataFrame
+        Timetable with columns [grade, class, day, period, subject, teacher, room].
+
+    Returns
+    -------
+    bytes
+        Excel file bytes where each sheet corresponds to a class and contains a
+        pivot table with days as columns and periods as rows. Each cell shows the
+        subject, teacher and room separated by new lines.
+    """
+    buffer = BytesIO()
+    days = ["月", "火", "水", "木", "金"]
+    periods = [1, 2, 3, 4, 5, 6]
+
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        for (grade, cls), group in df.groupby(["grade", "class"]):
+            tmp = group.copy()
+            tmp["info"] = tmp.apply(
+                lambda r: f"{r['subject']}\n{r['teacher']}\n{r['room']}", axis=1
+            )
+            pivot = (
+                tmp.pivot(index="period", columns="day", values="info")
+                .reindex(index=periods, columns=days)
+                .fillna("")
+            )
+            pivot.to_excel(writer, sheet_name=f"{grade}-{cls}")
+    buffer.seek(0)
+    return buffer.getvalue()
+
+def export_teacher_schedule(df: pd.DataFrame) -> bytes:
+    """Create an Excel file of teacher schedules.
+
+    A pivot table is generated for each teacher with days as rows and
+    periods as columns. Each cell contains the class and subject for the
+    assigned slot. Teachers appear as individual sheets in the workbook.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Scheduling table containing at least the columns
+        ``['grade', 'class', 'day', 'period', 'subject', 'teacher']``.
+
+    Returns
+    -------
+    bytes
+        Excel file data.
+    """
+
+    # Split rows for multiple teachers separated by '/'
+    expanded = df.copy()
+    expanded = expanded[expanded['teacher'] != '']
+    expanded = expanded.assign(teacher=expanded['teacher'].str.split('/')).explode('teacher')
+
+    # Display "{grade}-{class} {subject}" in each cell
+    expanded['label'] = (
+        expanded['grade'].astype(str)
+        + '-' + expanded['class'].astype(str)
+        + ' ' + expanded['subject']
+    )
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        for teacher, group in expanded.groupby('teacher'):
+            pivot = (
+                group.pivot(index='day', columns='period', values='label')
+                .reindex(index=week, columns=periods)
+            )
+            pivot = pivot.fillna('')
+
+            # Remove characters invalid for Excel sheet names / file names
+            safe_name = re.sub(r'[\\/*?\[\]:]', '', teacher)[:31]
+            pivot.to_excel(writer, sheet_name=safe_name)
+
+    output.seek(0)
+    return output.getvalue()
+
+def export_room_usage(df: pd.DataFrame):
+    """Export room usage as an Excel file with one sheet per room."""
+    df = df.copy()
+    df["class_subject"] = df.apply(
+        lambda r: f"{r['grade']}-{r['class']} {r['subject']}", axis=1
+    )
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        for room, group in df.groupby("room"):
+            pivot = (
+                group.pivot_table(
+                    index="day",
+                    columns="period",
+                    values="class_subject",
+                    aggfunc=lambda x: "\n".join(x),
+                    fill_value="",
+                )
+                .reindex(index=week, columns=periods, fill_value="")
+            )
+            pivot.to_excel(writer, sheet_name=str(room))
+    output.seek(0)
+    return output.getvalue()
+
+def export_subject_summary(df: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate timetable by grade, class and subject.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Timetable DataFrame containing ``grade``, ``class`` and ``subject``
+        columns. Each row represents one lesson slot.
+
+    Returns
+    -------
+    pd.DataFrame
+        Summary dataframe with the number of weekly periods for each
+        combination of grade, class and subject. The summary is also written
+        to ``subject_summary.csv`` in UTF-8 with BOM for easy download.
+    """
+
+    summary = (
+        df.groupby(["grade", "class", "subject"])
+        .size()
+        .reset_index(name="periods_per_week")
+        .sort_values(["grade", "class", "subject"])
+    )
+
+    summary.to_csv("subject_summary.csv", index=False, encoding="utf-8-sig")
+    return summary
