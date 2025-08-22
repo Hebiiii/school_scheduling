@@ -1,9 +1,28 @@
+"""Utility functions for exporting timetable data to Excel files.
+
+Each export helper returns ``bytes`` representing an Excel workbook. In
+addition to the requested summary sheets, every workbook now contains a
+``raw_data`` sheet with the original timetable ``DataFrame`` so that users
+can inspect or further process the underlying data easily.
+
+The module provides exports for class schedules, teacher schedules,
+room usage and subject summaries.
+"""
+
 import pandas as pd
 from io import BytesIO
 import re
 import io
 import openpyxl
 import xlsxwriter
+
+# Common ordering for days of the week and periods so that all exports share
+# the same layout. Previously these were imported from the streamlit app which
+# caused a ``NameError`` when the functions were used independently.  Defining
+# them here keeps the utilities self‑contained.
+WEEK = ["月", "火", "水", "木", "金"]
+PERIODS = [1, 2, 3, 4, 5, 6]
+
 
 def export_class_schedule(df: pd.DataFrame) -> bytes:
     """Create an Excel file of class schedules from a timetable DataFrame.
@@ -21,10 +40,11 @@ def export_class_schedule(df: pd.DataFrame) -> bytes:
         subject, teacher and room separated by new lines.
     """
     buffer = BytesIO()
-    days = ["月", "火", "水", "木", "金"]
-    periods = [1, 2, 3, 4, 5, 6]
 
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        # Include raw data sheet for reference
+        df.to_excel(writer, sheet_name="raw_data", index=False)
+
         for (grade, cls), group in df.groupby(["grade", "class"]):
             tmp = group.copy()
             tmp["info"] = tmp.apply(
@@ -32,7 +52,7 @@ def export_class_schedule(df: pd.DataFrame) -> bytes:
             )
             pivot = (
                 tmp.pivot(index="period", columns="day", values="info")
-                .reindex(index=periods, columns=days)
+                .reindex(index=PERIODS, columns=WEEK)
                 .fillna("")
             )
             pivot.to_excel(writer, sheet_name=f"{grade}-{cls}")
@@ -72,10 +92,13 @@ def export_teacher_schedule(df: pd.DataFrame) -> bytes:
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        # Add raw data
+        df.to_excel(writer, sheet_name="raw_data", index=False)
+
         for teacher, group in expanded.groupby('teacher'):
             pivot = (
                 group.pivot(index='day', columns='period', values='label')
-                .reindex(index=week, columns=periods)
+                .reindex(index=WEEK, columns=PERIODS)
             )
             pivot = pivot.fillna('')
 
@@ -94,6 +117,9 @@ def export_room_usage(df: pd.DataFrame):
     )
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        # Add raw data
+        df.to_excel(writer, sheet_name="raw_data", index=False)
+
         for room, group in df.groupby("room"):
             pivot = (
                 group.pivot_table(
@@ -103,27 +129,18 @@ def export_room_usage(df: pd.DataFrame):
                     aggfunc=lambda x: "\n".join(x),
                     fill_value="",
                 )
-                .reindex(index=week, columns=periods, fill_value="")
+                .reindex(index=WEEK, columns=PERIODS, fill_value="")
             )
             pivot.to_excel(writer, sheet_name=str(room))
     output.seek(0)
     return output.getvalue()
 
-def export_subject_summary(df: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate timetable by grade, class and subject.
+def export_subject_summary(df: pd.DataFrame) -> bytes:
+    """Aggregate timetable by grade, class and subject and export as Excel.
 
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Timetable DataFrame containing ``grade``, ``class`` and ``subject``
-        columns. Each row represents one lesson slot.
-
-    Returns
-    -------
-    pd.DataFrame
-        Summary dataframe with the number of weekly periods for each
-        combination of grade, class and subject. The summary is also written
-        to ``subject_summary.csv`` in UTF-8 with BOM for easy download.
+    The resulting workbook contains two sheets:
+    ``summary`` – the aggregated subject counts, and ``raw_data`` – the
+    original timetable.
     """
 
     summary = (
@@ -133,5 +150,10 @@ def export_subject_summary(df: pd.DataFrame) -> pd.DataFrame:
         .sort_values(["grade", "class", "subject"])
     )
 
-    summary.to_csv("subject_summary.csv", index=False, encoding="utf-8-sig")
-    return summary
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        summary.to_excel(writer, sheet_name="summary", index=False)
+        df.to_excel(writer, sheet_name="raw_data", index=False)
+
+    output.seek(0)
+    return output.getvalue()
