@@ -12,9 +12,7 @@ room usage and subject summaries.
 import pandas as pd
 from io import BytesIO
 import re
-import io
 from openpyxl.styles import Border, Side
-import xlsxwriter
 import zipfile
 
 # Common ordering for days of the week and periods so that all exports share
@@ -132,15 +130,16 @@ def export_class_schedule(df: pd.DataFrame) -> bytes:
 def export_teacher_schedule(df: pd.DataFrame) -> bytes:
     """Create an Excel file of teacher schedules.
 
-    A pivot table is generated for each teacher with days as rows and
-    periods as columns. Each cell contains the class and subject for the
-    assigned slot. Teachers appear as individual sheets in the workbook.
+    For each teacher a sheet is created with days as rows and periods as
+    columns.  Within each period three consecutive rows are used to show
+    the subject, teacher and room so that details are separated instead of
+    combined into a single cell.
 
     Parameters
     ----------
     df : pandas.DataFrame
         Scheduling table containing at least the columns
-        ``['grade', 'class', 'day', 'period', 'subject', 'teacher']``.
+        ``['grade', 'class', 'day', 'period', 'subject', 'teacher', 'room']``.
 
     Returns
     -------
@@ -148,67 +147,193 @@ def export_teacher_schedule(df: pd.DataFrame) -> bytes:
         Excel file data.
     """
 
-    # Split rows for multiple teachers separated by '/'
     expanded = df.copy()
     expanded = expanded[expanded['teacher'] != '']
     expanded = expanded.assign(teacher=expanded['teacher'].str.split('/')).explode('teacher')
 
-    # Display "{grade}-{class} {subject}" in each cell
-    expanded['label'] = (
+    # combine class and subject for display in the subject row
+    expanded['subject_line'] = (
         expanded['grade'].astype(str)
         + '-' + expanded['class'].astype(str)
         + ' ' + expanded['subject']
     )
 
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        # Add raw data
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="raw_data", index=False)
 
         for teacher, group in expanded.groupby('teacher'):
-            pivot = (
-                group.pivot_table(
-                    index='day',
-                    columns='period',
-                    values='label',
-                    aggfunc=lambda x: "\n".join(x),
-                    fill_value="",
+            pivots = {}
+            for col, key in [("subject_line", "subject"), ("teacher", "teacher"), ("room", "room")]:
+                piv = (
+                    group.pivot_table(
+                        index="day",
+                        columns="period",
+                        values=col,
+                        aggfunc=lambda x: "\n".join(x),
+                        fill_value="",
+                    )
+                    .reindex(index=WEEK, columns=PERIODS, fill_value="")
                 )
-                .reindex(index=WEEK, columns=PERIODS, fill_value="")
+                pivots[key] = piv
+
+            combined = pd.concat(pivots.values(), keys=pivots.keys())
+            combined = combined.swaplevel(0, 1)
+            combined.index.names = ["day", "info"]
+            combined = combined.reindex(
+                pd.MultiIndex.from_product(
+                    [WEEK, ["subject", "teacher", "room"]],
+                    names=["day", "info"],
+                ),
+                fill_value="",
             )
 
-            # Remove characters invalid for Excel sheet names / file names
+            display_df = combined.reset_index()
+            display_df.loc[display_df["info"] != "subject", "day"] = ""
+            display_df = display_df.drop(columns=["info"])
+
             safe_name = re.sub(r'[\\/*?\[\]:]', '', teacher)[:31]
-            pivot.to_excel(writer, sheet_name=safe_name)
+            display_df.to_excel(writer, sheet_name=safe_name, index=False)
 
-    output.seek(0)
-    return output.getvalue()
+            ws = writer.sheets[safe_name]
+            thin = Side(style="thin", color="000000")
 
-def export_room_usage(df: pd.DataFrame):
-    """Export room usage as an Excel file with one sheet per room."""
+            n_body_rows = display_df.shape[0]
+            n_cols = display_df.shape[1]
+            n_total_rows = n_body_rows + 1
+
+            for r in range(1, n_total_rows + 1):
+                for c in range(1, n_cols + 1):
+                    cell = ws.cell(row=r, column=c)
+                    b = cell.border
+                    cell.border = Border(
+                        left=b.left,
+                        right=thin,
+                        top=b.top,
+                        bottom=b.bottom,
+                    )
+
+            for c in range(1, n_cols + 1):
+                cell = ws.cell(row=1, column=c)
+                b = cell.border
+                cell.border = Border(
+                    left=b.left,
+                    right=b.right,
+                    top=b.top,
+                    bottom=thin,
+                )
+
+            for i in range(n_body_rows):
+                if (i + 1) % 3 == 0:
+                    r = 2 + i
+                    for c in range(1, n_cols + 1):
+                        cell = ws.cell(row=r, column=c)
+                        b = cell.border
+                        cell.border = Border(
+                            left=b.left,
+                            right=b.right,
+                            top=b.top,
+                            bottom=thin,
+                        )
+
+    buffer.seek(0)
+    return buffer.getvalue()
+
+def export_room_usage(df: pd.DataFrame) -> bytes:
+    """Export room usage as an Excel file with one sheet per room.
+
+    Each sheet lays out days in rows and periods in columns with three
+    consecutive rows per day showing subject, teacher and room.  This
+    mirrors the layout of :func:`export_class_schedule`.
+    """
+
     df = df.copy()
-    df["class_subject"] = df.apply(
-        lambda r: f"{r['grade']}-{r['class']} {r['subject']}", axis=1
+    df["subject_line"] = (
+        df["grade"].astype(str)
+        + '-' + df["class"].astype(str)
+        + ' ' + df["subject"]
     )
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        # Add raw data
+
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="raw_data", index=False)
 
         for room, group in df.groupby("room"):
-            pivot = (
-                group.pivot_table(
-                    index="day",
-                    columns="period",
-                    values="class_subject",
-                    aggfunc=lambda x: "\n".join(x),
-                    fill_value="",
+            pivots = {}
+            for col, key in [("subject_line", "subject"), ("teacher", "teacher"), ("room", "room")]:
+                piv = (
+                    group.pivot_table(
+                        index="day",
+                        columns="period",
+                        values=col,
+                        aggfunc=lambda x: "\n".join(x),
+                        fill_value="",
+                    )
+                    .reindex(index=WEEK, columns=PERIODS, fill_value="")
                 )
-                .reindex(index=WEEK, columns=PERIODS, fill_value="")
+                pivots[key] = piv
+
+            combined = pd.concat(pivots.values(), keys=pivots.keys())
+            combined = combined.swaplevel(0, 1)
+            combined.index.names = ["day", "info"]
+            combined = combined.reindex(
+                pd.MultiIndex.from_product(
+                    [WEEK, ["subject", "teacher", "room"]],
+                    names=["day", "info"],
+                ),
+                fill_value="",
             )
-            pivot.to_excel(writer, sheet_name=str(room))
-    output.seek(0)
-    return output.getvalue()
+
+            display_df = combined.reset_index()
+            display_df.loc[display_df["info"] != "subject", "day"] = ""
+            display_df = display_df.drop(columns=["info"])
+
+            safe_name = re.sub(r'[\\/*?\[\]:]', '', str(room))[:31]
+            display_df.to_excel(writer, sheet_name=safe_name, index=False)
+
+            ws = writer.sheets[safe_name]
+            thin = Side(style="thin", color="000000")
+
+            n_body_rows = display_df.shape[0]
+            n_cols = display_df.shape[1]
+            n_total_rows = n_body_rows + 1
+
+            for r in range(1, n_total_rows + 1):
+                for c in range(1, n_cols + 1):
+                    cell = ws.cell(row=r, column=c)
+                    b = cell.border
+                    cell.border = Border(
+                        left=b.left,
+                        right=thin,
+                        top=b.top,
+                        bottom=b.bottom,
+                    )
+
+            for c in range(1, n_cols + 1):
+                cell = ws.cell(row=1, column=c)
+                b = cell.border
+                cell.border = Border(
+                    left=b.left,
+                    right=b.right,
+                    top=b.top,
+                    bottom=thin,
+                )
+
+            for i in range(n_body_rows):
+                if (i + 1) % 3 == 0:
+                    r = 2 + i
+                    for c in range(1, n_cols + 1):
+                        cell = ws.cell(row=r, column=c)
+                        b = cell.border
+                        cell.border = Border(
+                            left=b.left,
+                            right=b.right,
+                            top=b.top,
+                            bottom=thin,
+                        )
+
+    buffer.seek(0)
+    return buffer.getvalue()
 
 def export_subject_summary(df: pd.DataFrame) -> bytes:
     """Aggregate timetable by grade, class and subject and export as Excel.
