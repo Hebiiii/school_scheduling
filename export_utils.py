@@ -13,7 +13,7 @@ import pandas as pd
 from io import BytesIO
 import re
 import io
-import openpyxl
+from openpyxl.styles import Border, Side
 import xlsxwriter
 import zipfile
 
@@ -36,10 +36,10 @@ def export_class_schedule(df: pd.DataFrame) -> bytes:
     -------
     bytes
         Excel file bytes where each sheet corresponds to a class and contains a
-        pivot table with days as columns and periods as rows.  For each day three
-        columns are created – subject, teacher and room – so that timetable
-        details occupy separate cells instead of being combined into a single
-        cell.
+        pivot table with days as columns and periods as rows.  For each period
+        three consecutive rows are used – subject, teacher and room – so that
+        timetable details occupy separate rows instead of being combined into a
+        single cell.
     """
     buffer = BytesIO()
 
@@ -62,13 +62,70 @@ def export_class_schedule(df: pd.DataFrame) -> bytes:
                 )
                 pivots[col] = piv
 
-            combined = pd.concat(pivots.values(), axis=1, keys=pivots.keys())
-            combined = combined.swaplevel(0, 1, axis=1)
-            ordered_cols = pd.MultiIndex.from_product(
-                [WEEK, ["subject", "teacher", "room"]]
+            combined = pd.concat(pivots.values(), keys=pivots.keys())
+            combined = combined.swaplevel(0, 1)
+            combined.index.names = ["period", "info"]
+            combined = combined.reindex(
+                pd.MultiIndex.from_product(
+                    [PERIODS, ["subject", "teacher", "room"]],
+                    names=["period", "info"],
+                ),
+                fill_value="",
             )
-            combined = combined.reindex(columns=ordered_cols, fill_value="")
-            combined.to_excel(writer, sheet_name=f"{grade}-{cls}")
+
+            display_df = combined.reset_index()
+            # period 表示は 3 行 1 セットの先頭（=subject の行）のみ
+            display_df.loc[display_df["info"] != "subject", "period"] = ""
+            display_df = display_df.drop(columns=["info"])
+
+            sheet_name = f"{grade}-{cls}"
+            display_df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+            # ===== ここから枠線の付与 =====
+            ws = writer.sheets[sheet_name]
+            thin = Side(style="thin", color="000000")
+
+            n_body_rows = display_df.shape[0]       # データ行数（ヘッダ除く）
+            n_cols = display_df.shape[1]            # 列数（period + 曜日列）
+            n_total_rows = n_body_rows + 1          # ヘッダ込み
+
+            # すべてのセルに「列の右側」の枠線 → 曜日ごとの区切り線になる
+            for r in range(1, n_total_rows + 1):        # 1 はヘッダ行
+                for c in range(1, n_cols + 1):
+                    cell = ws.cell(row=r, column=c)
+                    b = cell.border
+                    cell.border = Border(
+                        left=b.left,
+                        right=thin,   # 列の右側に縦線
+                        top=b.top,
+                        bottom=b.bottom,
+                    )
+
+            # ヘッダ行の下に横線
+            for c in range(1, n_cols + 1):
+                cell = ws.cell(row=1, column=c)
+                b = cell.border
+                cell.border = Border(
+                    left=b.left,
+                    right=b.right,
+                    top=b.top,
+                    bottom=thin,
+                )
+
+            # period ブロック（3行1セット）の区切りに横線（下枠線）
+            # データは 2 行目から始まるので、i=0 の行は Excel の row=2
+            for i in range(n_body_rows):
+                if (i + 1) % 3 == 0:  # 各ブロックの末尾行
+                    r = 2 + i
+                    for c in range(1, n_cols + 1):
+                        cell = ws.cell(row=r, column=c)
+                        b = cell.border
+                        cell.border = Border(
+                            left=b.left,
+                            right=b.right,   # 既存の縦線は維持
+                            top=b.top,
+                            bottom=thin,     # ブロックの下に横線
+                        )
     buffer.seek(0)
     return buffer.getvalue()
 
@@ -183,7 +240,7 @@ def export_all_excel(df: pd.DataFrame) -> bytes:
     The archive contains class schedules, teacher schedules and room usage
     workbooks. Each workbook already includes a ``raw_data`` sheet.
     """
-    
+
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w") as zf:
         zf.writestr("class_schedule.xlsx", export_class_schedule(df))
