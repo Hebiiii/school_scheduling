@@ -599,7 +599,7 @@ def main():
                             key=f"{grade}_{subject}_joint_class",
                         )
         st.markdown("---")
-        st.markdown("#### 選択された合計のコマ数/総コマ数")
+        st.markdown("#### 初期設定の合計のコマ数/総コマ数")
         summary_cols = st.columns(len(grades))
         for col, grade in zip(summary_cols, grades):
             total_selected = sum(
