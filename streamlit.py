@@ -9,7 +9,9 @@ from export_utils import (
     export_teacher_schedule,
     export_room_usage,
     export_subject_summary,
+    export_all_excel,
 )
+
 
 # ====== Constants ======
 subjects = ["国語", "算数", "英語", "理科", "社会", "総合", "学活・道徳", "図工", "音楽", "体育", "家庭科", "生活", "書写"]
@@ -667,39 +669,38 @@ def main():
             cols = st.columns(5)
             with cols[0]:
                 st.download_button(
-                    "クラスごとの時間割をExcelでダウンロード",
+                    "クラスごとの時間割をダウンロード",
                     export_class_schedule(df),
                     file_name="class_schedule.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
             with cols[1]:
                 st.download_button(
-                    "教員ごとの時間割をExcelでダウンロード",
+                    "教員ごとの時間割をダウンロード",
                     export_teacher_schedule(df),
                     file_name="teacher_schedule.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
             with cols[2]:
                 st.download_button(
-                    "教室ごとの使用状況をExcelでダウンロード",
+                    "教室ごとの使用状況をダウンロード",
                     export_room_usage(df),
                     file_name="room_usage.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
             with cols[3]:
                 st.download_button(
-                    "教科ごとの時間割をExcelでダウンロード",
+                    "教科ごとの時間割をダウンロード",
                     export_subject_summary(df),
                     file_name="subject_summary.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
             with cols[4]:
-                csv = df.to_csv(index=False).encode("utf-8")
                 st.download_button(
-                    "すべてのデータをCSVでダウンロード",
-                    csv,
-                    file_name="timetable.csv",
-                    mime="text/csv",
+                    "全データをダウンロード",
+                    export_all_excel(df),
+                    file_name="timetable_exports.zip",
+                    mime="application/zip",
                 )
         except RuntimeError as e:
             progress_bar.empty()

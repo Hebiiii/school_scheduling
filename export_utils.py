@@ -15,6 +15,7 @@ import re
 import io
 import openpyxl
 import xlsxwriter
+import zipfile
 
 # Common ordering for days of the week and periods so that all exports share
 # the same layout. Previously these were imported from the streamlit app which
@@ -22,7 +23,6 @@ import xlsxwriter
 # them here keeps the utilities self‑contained.
 WEEK = ["月", "火", "水", "木", "金"]
 PERIODS = [1, 2, 3, 4, 5, 6]
-
 
 def export_class_schedule(df: pd.DataFrame) -> bytes:
     """Create an Excel file of class schedules from a timetable DataFrame.
@@ -51,9 +51,14 @@ def export_class_schedule(df: pd.DataFrame) -> bytes:
                 lambda r: f"{r['subject']}\n{r['teacher']}\n{r['room']}", axis=1
             )
             pivot = (
-                tmp.pivot(index="period", columns="day", values="info")
-                .reindex(index=PERIODS, columns=WEEK)
-                .fillna("")
+                tmp.pivot_table(
+                    index="period",
+                    columns="day",
+                    values="info",
+                    aggfunc=lambda x: "\n".join(x),
+                    fill_value="",
+                )
+                .reindex(index=PERIODS, columns=WEEK, fill_value="")
             )
             pivot.to_excel(writer, sheet_name=f"{grade}-{cls}")
     buffer.seek(0)
@@ -97,10 +102,15 @@ def export_teacher_schedule(df: pd.DataFrame) -> bytes:
 
         for teacher, group in expanded.groupby('teacher'):
             pivot = (
-                group.pivot(index='day', columns='period', values='label')
-                .reindex(index=WEEK, columns=PERIODS)
+                group.pivot_table(
+                    index='day',
+                    columns='period',
+                    values='label',
+                    aggfunc=lambda x: "\n".join(x),
+                    fill_value="",
+                )
+                .reindex(index=WEEK, columns=PERIODS, fill_value="")
             )
-            pivot = pivot.fillna('')
 
             # Remove characters invalid for Excel sheet names / file names
             safe_name = re.sub(r'[\\/*?\[\]:]', '', teacher)[:31]
@@ -157,3 +167,19 @@ def export_subject_summary(df: pd.DataFrame) -> bytes:
 
     output.seek(0)
     return output.getvalue()
+
+
+def export_all_excel(df: pd.DataFrame) -> bytes:
+    """Package key Excel exports into a single ZIP archive.
+
+    The archive contains class schedules, teacher schedules and room usage
+    workbooks. Each workbook already includes a ``raw_data`` sheet.
+    """
+    
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zf:
+        zf.writestr("class_schedule.xlsx", export_class_schedule(df))
+        zf.writestr("teacher_schedule.xlsx", export_teacher_schedule(df))
+        zf.writestr("room_usage.xlsx", export_room_usage(df))
+    buffer.seek(0)
+    return buffer.getvalue()
