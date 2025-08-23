@@ -258,6 +258,9 @@ def export_room_usage(df: pd.DataFrame) -> bytes:
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="raw_data", index=False)
 
+        used_names = set()
+        fallback_counter = 1
+
         for room, group in df.groupby("room"):
             pivots = {}
             for col, key in [("subject_line", "subject"), ("teacher", "teacher"), ("room", "room")]:
@@ -288,7 +291,22 @@ def export_room_usage(df: pd.DataFrame) -> bytes:
             display_df.loc[display_df["info"] != "subject", "day"] = ""
             display_df = display_df.drop(columns=["info"])
 
-            safe_name = re.sub(r'[\\/*?\[\]:]', '', str(room))[:31]
+            safe_name = re.sub(r'[\\/*?\[\]:]', '', str(room)).strip()[:31]
+            if not safe_name:
+                while True:
+                    safe_name = f"room{fallback_counter}"
+                    fallback_counter += 1
+                    if safe_name not in used_names:
+                        break
+
+            base_name = safe_name
+            suffix = 1
+            while safe_name in used_names:
+                safe_name = f"{base_name}_{suffix}"
+                suffix += 1
+
+            used_names.add(safe_name)
+
             display_df.to_excel(writer, sheet_name=safe_name, index=False)
 
             ws = writer.sheets[safe_name]
