@@ -600,16 +600,16 @@ def main():
                         )
 
         st.markdown("---")
-        # st.markdown("#### 選択された合計のコマ数/総コマ数")
-        # summary_cols = st.columns(len(grades))
-        # for col, grade in zip(summary_cols, grades):
-        #     total_selected = sum(
-        #         st.session_state.get(f"{grade}_{subject}_num", 0)
-        #         for subject in subjects
-        #     )
-        #     total_slots = 25 + len(grade_info[grade]["six_days"])
-        #     with col:
-        #         st.markdown(f"{grade}年: {total_selected}/{total_slots}")
+        st.markdown("#### 選択された合計のコマ数/総コマ数")
+        summary_cols = st.columns(len(grades))
+        for col, grade in zip(summary_cols, grades):
+            total_selected = sum(
+                st.session_state.get(f"{grade}_{subject}_num", 0)
+                for subject in subjects
+            )
+            total_slots = 25 + len(grade_info[grade]["six_days"])
+            with col:
+                st.markdown(f"{grade}年: {total_selected}/{total_slots}")
 
         submitted = st.form_submit_button("時間割りを作成する")
 
