@@ -615,6 +615,7 @@ def main():
         submitted = st.form_submit_button("時間割りを作成する")
 
     if submitted:
+        progress_bar = st.progress(0)
         subject_settings = {}
         for grade in grades:
             subject_settings[grade] = {}
@@ -653,8 +654,6 @@ def main():
                     "joint": joint,
                 }
 
-        progress_bar = st.progress(0)
-
         def update_progress(v):
             progress_bar.progress(v)
 
@@ -663,13 +662,13 @@ def main():
                 df = generate_timetable(
                     grade_info, subject_settings, progress_callback=update_progress
                 )
+                st.session_state["timetable_df"] = df
+                st.session_state["export_class_schedule"] = export_class_schedule(df)
+                st.session_state["export_teacher_schedule"] = export_teacher_schedule(df)
+                st.session_state["export_room_usage"] = export_room_usage(df)
+                st.session_state["export_subject_summary"] = export_subject_summary(df)
+                st.session_state["export_all_excel"] = export_all_excel(df)
             progress_bar.empty()
-            st.session_state["timetable_df"] = df
-            st.session_state["export_class_schedule"] = export_class_schedule(df)
-            st.session_state["export_teacher_schedule"] = export_teacher_schedule(df)
-            st.session_state["export_room_usage"] = export_room_usage(df)
-            st.session_state["export_subject_summary"] = export_subject_summary(df)
-            st.session_state["export_all_excel"] = export_all_excel(df)
         except RuntimeError as e:
             progress_bar.empty()
             msg = str(e)
