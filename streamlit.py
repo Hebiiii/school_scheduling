@@ -663,45 +663,12 @@ def main():
                     grade_info, subject_settings, progress_callback=update_progress
                 )
             progress_bar.empty()
-            st.success("時間割を生成しました")
-            st.dataframe(df)
-
-            cols = st.columns(5)
-            with cols[0]:
-                st.download_button(
-                    "クラスごとの時間割をダウンロード",
-                    export_class_schedule(df),
-                    file_name="class_schedule.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
-            with cols[1]:
-                st.download_button(
-                    "教員ごとの時間割をダウンロード",
-                    export_teacher_schedule(df),
-                    file_name="teacher_schedule.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
-            with cols[2]:
-                st.download_button(
-                    "教室ごとの使用状況をダウンロード",
-                    export_room_usage(df),
-                    file_name="room_usage.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
-            with cols[3]:
-                st.download_button(
-                    "教科ごとの時間割をダウンロード",
-                    export_subject_summary(df),
-                    file_name="subject_summary.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
-            with cols[4]:
-                st.download_button(
-                    "全データをダウンロード",
-                    export_all_excel(df),
-                    file_name="timetable_exports.zip",
-                    mime="application/zip",
-                )
+            st.session_state["timetable_df"] = df
+            st.session_state["export_class_schedule"] = export_class_schedule(df)
+            st.session_state["export_teacher_schedule"] = export_teacher_schedule(df)
+            st.session_state["export_room_usage"] = export_room_usage(df)
+            st.session_state["export_subject_summary"] = export_subject_summary(df)
+            st.session_state["export_all_excel"] = export_all_excel(df)
         except RuntimeError as e:
             progress_bar.empty()
             msg = str(e)
@@ -723,6 +690,59 @@ def main():
         except Exception as e:
             progress_bar.empty()
             st.error(f"エラー: {e}")
+
+    if "timetable_df" in st.session_state:
+        st.success("時間割を生成しました")
+        df = st.session_state["timetable_df"]
+        st.dataframe(df)
+
+        if "export_class_schedule" not in st.session_state:
+            st.session_state["export_class_schedule"] = export_class_schedule(df)
+        if "export_teacher_schedule" not in st.session_state:
+            st.session_state["export_teacher_schedule"] = export_teacher_schedule(df)
+        if "export_room_usage" not in st.session_state:
+            st.session_state["export_room_usage"] = export_room_usage(df)
+        if "export_subject_summary" not in st.session_state:
+            st.session_state["export_subject_summary"] = export_subject_summary(df)
+        if "export_all_excel" not in st.session_state:
+            st.session_state["export_all_excel"] = export_all_excel(df)
+
+        cols = st.columns(5)
+        with cols[0]:
+            st.download_button(
+                "クラスごとの時間割をダウンロード",
+                st.session_state["export_class_schedule"],
+                file_name="class_schedule.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        with cols[1]:
+            st.download_button(
+                "教員ごとの時間割をダウンロード",
+                st.session_state["export_teacher_schedule"],
+                file_name="teacher_schedule.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        with cols[2]:
+            st.download_button(
+                "教室ごとの使用状況をダウンロード",
+                st.session_state["export_room_usage"],
+                file_name="room_usage.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        with cols[3]:
+            st.download_button(
+                "教科ごとの時間割をダウンロード",
+                st.session_state["export_subject_summary"],
+                file_name="subject_summary.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        with cols[4]:
+            st.download_button(
+                "全データをダウンロード",
+                st.session_state["export_all_excel"],
+                file_name="timetable_exports.zip",
+                mime="application/zip",
+            )
 
 
 if __name__ == "__main__":
