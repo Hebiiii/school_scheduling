@@ -36,8 +36,10 @@ def export_class_schedule(df: pd.DataFrame) -> bytes:
     -------
     bytes
         Excel file bytes where each sheet corresponds to a class and contains a
-        pivot table with days as columns and periods as rows. Each cell shows the
-        subject, teacher and room separated by new lines.
+        pivot table with days as columns and periods as rows.  For each day three
+        columns are created – subject, teacher and room – so that timetable
+        details occupy separate cells instead of being combined into a single
+        cell.
     """
     buffer = BytesIO()
 
@@ -46,21 +48,27 @@ def export_class_schedule(df: pd.DataFrame) -> bytes:
         df.to_excel(writer, sheet_name="raw_data", index=False)
 
         for (grade, cls), group in df.groupby(["grade", "class"]):
-            tmp = group.copy()
-            tmp["info"] = tmp.apply(
-                lambda r: f"{r['subject']}\n{r['teacher']}\n{r['room']}", axis=1
-            )
-            pivot = (
-                tmp.pivot_table(
-                    index="period",
-                    columns="day",
-                    values="info",
-                    aggfunc=lambda x: "\n".join(x),
-                    fill_value="",
+            pivots = {}
+            for col in ["subject", "teacher", "room"]:
+                piv = (
+                    group.pivot_table(
+                        index="period",
+                        columns="day",
+                        values=col,
+                        aggfunc=lambda x: "\n".join(x),
+                        fill_value="",
+                    )
+                    .reindex(index=PERIODS, columns=WEEK, fill_value="")
                 )
-                .reindex(index=PERIODS, columns=WEEK, fill_value="")
+                pivots[col] = piv
+
+            combined = pd.concat(pivots.values(), axis=1, keys=pivots.keys())
+            combined = combined.swaplevel(0, 1, axis=1)
+            ordered_cols = pd.MultiIndex.from_product(
+                [WEEK, ["subject", "teacher", "room"]]
             )
-            pivot.to_excel(writer, sheet_name=f"{grade}-{cls}")
+            combined = combined.reindex(columns=ordered_cols, fill_value="")
+            combined.to_excel(writer, sheet_name=f"{grade}-{cls}")
     buffer.seek(0)
     return buffer.getvalue()
 
