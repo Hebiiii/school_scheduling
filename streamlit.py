@@ -504,6 +504,7 @@ def main():
             - **クラス合同授業**では、各学年のそれぞれのクラスが同じ時間にコマを設定されます。(例: 1-1,1-2,1-3が同じ時間に体育)\n
         4. ページ下部のボタンで時間割を生成し、CSVをダウンロードできます。(選択された授業数が総コマ数より多い場合はエラーになります)""",
     )
+    st.linkbutton("詳細はこちら", url="https://github.com/Hebiiii/school_scheduling/blob/main/README.md")
     st.markdown("---")
 
     grades = [1, 2, 3, 4, 5, 6]
